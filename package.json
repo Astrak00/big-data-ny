@@ -1,0 +1,13 @@
+{
+  "name": "nyc-data-visualization",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun run --hot src/visualization/server.ts",
+    "start": "bun run src/visualization/server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.10.7",
+    "parquet-wasm": "^0.7.1"
+  }
+}
