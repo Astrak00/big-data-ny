@@ -810,3 +810,136 @@ export async function fetchHistoricalWeather(
 export async function closeDatabase(): Promise<void> {
   await sql.end();
 }
+
+// ===========================================
+// Weather Grid for Map Overlay
+// ===========================================
+
+export interface WeatherGridPoint {
+  lat: number;
+  lon: number;
+  precipitation: number;
+  temperature: number;
+}
+
+export interface WeatherGridData {
+  points: WeatherGridPoint[];
+  bounds: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  };
+  date: string;
+  maxPrecipitation: number;
+}
+
+/**
+ * Fetches weather grid data for the NYC area from Open-Meteo.
+ * Creates a grid of points covering the bounding box of NYC.
+ */
+export async function fetchWeatherGrid(
+  date?: string
+): Promise<WeatherGridData> {
+  // NYC bounding box (approximate)
+  const bounds = {
+    north: 40.92,
+    south: 40.49,
+    east: -73.70,
+    west: -74.26,
+  };
+
+  // Grid resolution: 5x5 grid points
+  const latStep = (bounds.north - bounds.south) / 4;
+  const lonStep = (bounds.east - bounds.west) / 4;
+
+  const points: WeatherGridPoint[] = [];
+  const today = new Date().toISOString().split("T")[0];
+  const isHistorical = date && date < today;
+
+  // Collect all lat/lon pairs for batch request
+  const lats: number[] = [];
+  const lons: number[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    for (let j = 0; j < 5; j++) {
+      const lat = bounds.south + i * latStep;
+      const lon = bounds.west + j * lonStep;
+      lats.push(lat);
+      lons.push(lon);
+    }
+  }
+
+  try {
+    let maxPrecipitation = 0;
+
+    if (isHistorical && date) {
+      // Use archive API for historical data
+      // Fetch each point individually (Open-Meteo archive doesn't support multi-location)
+      for (let i = 0; i < lats.length; i++) {
+        const lat = lats[i];
+        const lon = lons[i];
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&daily=precipitation_sum,temperature_2m_mean&timezone=America%2FNew_York`;
+
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+          const precip = data.daily?.precipitation_sum?.[0] || 0;
+          const temp = data.daily?.temperature_2m_mean?.[0] || 0;
+
+          points.push({
+            lat,
+            lon,
+            precipitation: precip,
+            temperature: temp,
+          });
+
+          if (precip > maxPrecipitation) maxPrecipitation = precip;
+        } catch (e) {
+          points.push({ lat, lon, precipitation: 0, temperature: 0 });
+        }
+      }
+    } else {
+      // Use forecast API for current/future data
+      // Fetch each point individually
+      for (let i = 0; i < lats.length; i++) {
+        const lat = lats[i];
+        const lon = lons[i];
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=precipitation,temperature_2m&timezone=America%2FNew_York`;
+
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+          const precip = data.current?.precipitation || 0;
+          const temp = data.current?.temperature_2m || 0;
+
+          points.push({
+            lat,
+            lon,
+            precipitation: precip,
+            temperature: temp,
+          });
+
+          if (precip > maxPrecipitation) maxPrecipitation = precip;
+        } catch (e) {
+          points.push({ lat, lon, precipitation: 0, temperature: 0 });
+        }
+      }
+    }
+
+    return {
+      points,
+      bounds,
+      date: date || today,
+      maxPrecipitation,
+    };
+  } catch (error) {
+    console.error("Error fetching weather grid:", error);
+    return {
+      points: [],
+      bounds,
+      date: date || today,
+      maxPrecipitation: 0,
+    };
+  }
+}

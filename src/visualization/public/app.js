@@ -11,6 +11,7 @@ var state = {
     endDate: null,
     mtaChart: null,
     boroChart: null,
+    theme: 'dark',
     allData: {
         taxi: [],
         bike: [],
@@ -63,7 +64,12 @@ var WEATHER_ICONS = {
 // ===========================================
 var map = L.map('map').setView([40.7128, -74.006], 12);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+var TILE_URLS = {
+    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+};
+
+var currentTileLayer = L.tileLayer(TILE_URLS.dark, {
     attribution: '© OpenStreetMap © CARTO',
     subdomains: 'abcd',
     maxZoom: 19
@@ -76,7 +82,8 @@ var layers = {
     taxi: createClusterGroup(COLORS.taxi),
     bike: createClusterGroup(COLORS.bike),
     arrests: createClusterGroup(COLORS.arrests),
-    shootings: createClusterGroup(COLORS.shootings)
+    shootings: createClusterGroup(COLORS.shootings),
+    weather: L.layerGroup()
 };
 
 // Add default layers to map
@@ -192,6 +199,93 @@ async function updateWeather(startDate, endDate) {
         }
     } catch (e) {
         console.error('Error updating weather:', e);
+    }
+}
+
+// ===========================================
+// Weather Overlay Functions
+// ===========================================
+var weatherOverlayVisible = false;
+var weatherGridData = null;
+
+async function loadWeatherGrid(date) {
+    try {
+        var url = date ? '/api/weather/grid?date=' + date : '/api/weather/grid';
+        var res = await fetch(url);
+        var result = await res.json();
+        
+        if (result.success && result.data) {
+            weatherGridData = result.data;
+            updateWeatherCount();
+            if (weatherOverlayVisible) {
+                renderWeatherOverlay();
+            }
+        }
+    } catch (e) {
+        console.error('Error loading weather grid:', e);
+    }
+}
+
+function updateWeatherCount() {
+    var countEl = getElement('count-weather');
+    if (countEl && weatherGridData) {
+        if (weatherGridData.maxPrecipitation > 0) {
+            countEl.textContent = weatherGridData.maxPrecipitation.toFixed(1) + 'mm';
+        } else {
+            countEl.textContent = 'Dry';
+        }
+    }
+}
+
+function renderWeatherOverlay() {
+    layers.weather.clearLayers();
+    
+    if (!weatherGridData || !weatherGridData.points || weatherGridData.points.length === 0) {
+        return;
+    }
+    
+    var points = weatherGridData.points;
+    var maxPrecip = Math.max(weatherGridData.maxPrecipitation, 1); // Avoid division by zero
+    
+    // Create circles for each grid point with interpolated precipitation
+    points.forEach(function(point) {
+        if (point.precipitation > 0) {
+            var intensity = Math.min(point.precipitation / maxPrecip, 1);
+            var opacity = 0.1 + intensity * 0.5;
+            var radius = 3000 + intensity * 5000; // 3-8 km radius
+            
+            var circle = L.circle([point.lat, point.lon], {
+                radius: radius,
+                fillColor: COLORS.blue,
+                fillOpacity: opacity,
+                stroke: false
+            });
+            
+            circle.bindPopup(
+                '<div class="popup-content">' +
+                '<h4 style="color:' + COLORS.blue + ';">Precipitation</h4>' +
+                '<p><span class="label">Amount</span><span class="value">' + point.precipitation.toFixed(1) + ' mm</span></p>' +
+                '<p><span class="label">Temperature</span><span class="value">' + point.temperature.toFixed(1) + '°C</span></p>' +
+                '</div>'
+            );
+            
+            layers.weather.addLayer(circle);
+        }
+    });
+    
+    // Show legend item
+    var legendPrecip = getElement('legend-precip');
+    if (legendPrecip) {
+        legendPrecip.style.display = 'flex';
+    }
+}
+
+function hideWeatherOverlay() {
+    layers.weather.clearLayers();
+    
+    var legendPrecip = getElement('legend-precip');
+    if (legendPrecip) {
+        legendPrecip.style.display = 'none';
     }
 }
 
@@ -554,6 +648,9 @@ async function loadData(startDate, endDate) {
         // Update weather
         await updateWeather(startDate, endDate);
         
+        // Load weather grid for overlay (use first date of range if range selected)
+        await loadWeatherGrid(startDate);
+        
         // Update map
         clearAllLayers();
         populateLayers(state.allData);
@@ -631,6 +728,49 @@ async function initDatePickers() {
 }
 
 // ===========================================
+// Theme Toggle
+// ===========================================
+function toggleTheme() {
+    var newTheme = state.theme === 'dark' ? 'light' : 'dark';
+    state.theme = newTheme;
+    
+    // Update HTML attribute
+    document.documentElement.setAttribute('data-theme', newTheme);
+    
+    // Update theme toggle icon
+    var themeIcon = document.querySelector('.theme-icon');
+    if (themeIcon) {
+        themeIcon.innerHTML = newTheme === 'dark' ? '&#9728;' : '&#9790;'; // Sun / Moon
+    }
+    
+    // Switch map tiles
+    map.removeLayer(currentTileLayer);
+    currentTileLayer = L.tileLayer(TILE_URLS[newTheme], {
+        attribution: '© OpenStreetMap © CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(map);
+    
+    // Save preference
+    try {
+        localStorage.setItem('nyc-theme', newTheme);
+    } catch (e) {
+        // localStorage not available
+    }
+}
+
+function loadSavedTheme() {
+    try {
+        var savedTheme = localStorage.getItem('nyc-theme');
+        if (savedTheme === 'light') {
+            toggleTheme();
+        }
+    } catch (e) {
+        // localStorage not available
+    }
+}
+
+// ===========================================
 // Event Handlers
 // ===========================================
 function setupEventListeners() {
@@ -653,11 +793,35 @@ function setupEventListeners() {
         loadData();
     });
     
+    // Theme toggle
+    var themeBtn = getElement('theme-toggle');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', toggleTheme);
+    }
+    
     // Layer toggles
     setupLayerToggle('layer-taxi', layers.taxi);
     setupLayerToggle('layer-bike', layers.bike);
     setupLayerToggle('layer-arrests', layers.arrests);
     setupLayerToggle('layer-shootings', layers.shootings);
+    
+    // Weather layer toggle (special handling)
+    var weatherCheckbox = getElement('layer-weather');
+    if (weatherCheckbox) {
+        var weatherToggle = weatherCheckbox.closest('.layer-toggle');
+        weatherCheckbox.addEventListener('change', function() {
+            weatherOverlayVisible = weatherCheckbox.checked;
+            if (weatherCheckbox.checked) {
+                map.addLayer(layers.weather);
+                weatherToggle.classList.add('active');
+                renderWeatherOverlay();
+            } else {
+                map.removeLayer(layers.weather);
+                weatherToggle.classList.remove('active');
+                hideWeatherOverlay();
+            }
+        });
+    }
 }
 
 function setupLayerToggle(checkboxId, layer) {
@@ -679,6 +843,7 @@ function setupLayerToggle(checkboxId, layer) {
 // Application Initialization
 // ===========================================
 function init() {
+    loadSavedTheme();
     setupEventListeners();
     initDatePickers();
     loadData();

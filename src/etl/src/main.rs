@@ -43,6 +43,9 @@ enum Commands {
         /// Maximum records to load (0 = all)
         #[arg(short, long, default_value = "0")]
         limit: usize,
+        /// Randomly sample records instead of loading sequentially
+        #[arg(short, long, default_value = "false")]
+        random: bool,
     },
     /// Load bike trip data from CSV
     Bike {
@@ -104,8 +107,8 @@ async fn main() -> Result<()> {
         Commands::All { data_dir } => {
             run_all_pipelines(&pool, &data_dir).await?;
         }
-        Commands::Taxi { source, limit } => {
-            loaders::taxi::load(&pool, &source, limit).await?;
+        Commands::Taxi { source, limit, random } => {
+            loaders::taxi::load(&pool, &source, limit, random).await?;
         }
         Commands::Bike { source, limit } => {
             loaders::bike::load(&pool, &source, limit).await?;
@@ -137,7 +140,7 @@ async fn run_all_pipelines(pool: &deadpool_postgres::Pool, data_dir: &str) -> Re
     let taxi_file = data_path.join("yellow_tripdata_2024-12.parquet");
     if taxi_file.exists() {
         info!("Loading taxi data...");
-        loaders::taxi::load(pool, taxi_file.to_str().unwrap(), 0).await?;
+        loaders::taxi::load(pool, taxi_file.to_str().unwrap(), 0, false).await?;
     }
     
     // Load bike data

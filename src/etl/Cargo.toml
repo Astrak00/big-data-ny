@@ -44,3 +44,6 @@ zip = "0.6"
 
 # Bytes for streaming
 bytes = "1.5"
+
+# Random number generation
+rand = "0.8"

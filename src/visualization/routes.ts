@@ -20,6 +20,7 @@ import {
   getDateRange,
   fetchWeatherData,
   fetchHistoricalWeather,
+  fetchWeatherGrid,
 } from "./data-loader";
 
 // ===========================================
@@ -190,6 +191,28 @@ export function createApiRoutes(): Hono {
       success: true,
       data: weather,
     });
+  });
+
+  // -------------------------------------------
+  // Weather Grid for Map Overlay
+  // -------------------------------------------
+  api.get("/weather/grid", async (c) => {
+    const date = c.req.query("date");
+
+    try {
+      const grid = await fetchWeatherGrid(date);
+      return c.json({
+        success: true,
+        data: grid,
+      });
+    } catch (error) {
+      console.error("Error fetching weather grid:", error);
+      return c.json({
+        success: false,
+        error: "Failed to fetch weather grid",
+        data: { points: [], bounds: {}, date: "", maxPrecipitation: 0 },
+      }, 500);
+    }
   });
 
   // -------------------------------------------

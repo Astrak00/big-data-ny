@@ -2,7 +2,7 @@
    NYC Urban Data Explorer - Styles
    =========================================== */
 
-/* CSS Variables */
+/* CSS Variables - Dark Theme (default) */
 :root {
     --bg-primary: #0a0a0f;
     --bg-secondary: #12121a;
@@ -24,6 +24,19 @@
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
+}
+
+/* Light Theme */
+[data-theme="light"] {
+    --bg-primary: #f5f7fa;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(0, 0, 0, 0.02);
+    --bg-card-hover: rgba(0, 0, 0, 0.05);
+    --border-color: rgba(0, 0, 0, 0.1);
+    --text-primary: #1a1a2e;
+    --text-secondary: #4a4a6a;
+    --text-muted: #8a8a9a;
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
 }
 
 /* Reset */
@@ -193,6 +206,27 @@ body {
 .btn-secondary:hover {
     background: var(--bg-card-hover);
     color: var(--text-primary);
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.theme-toggle .theme-icon {
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover .theme-icon {
+    transform: rotate(20deg);
 }
 
 /* ===========================================
@@ -589,6 +623,13 @@ body {
     box-shadow: 0 0 6px currentColor;
 }
 
+.legend-gradient {
+    width: 40px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(to right, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.9));
+}
+
 /* ===========================================
    Leaflet Customization
    =========================================== */
@@ -694,4 +735,28 @@ body {
     .weather-widget {
         justify-content: center;
     }
+}
+
+/* ===========================================
+   Light Theme Specific Overrides
+   =========================================== */
+[data-theme="light"] .date-input-group input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: none;
+}
+
+[data-theme="light"] .leaflet-popup-content-wrapper {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .leaflet-popup-tip {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .map-legend {
+    background: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="light"] .loading-overlay {
+    background: rgba(245, 247, 250, 0.95);
 }

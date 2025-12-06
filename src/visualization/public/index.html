@@ -53,6 +53,10 @@
                     <div class="weather-extra" id="weather-extra">--</div>
                 </div>
             </div>
+            
+            <button class="btn btn-secondary theme-toggle" id="theme-toggle" title="Toggle Light/Dark Mode">
+                <span class="theme-icon">&#9728;</span>
+            </button>
         </header>
         
         <!-- Sidebar -->
@@ -98,6 +102,15 @@
                         <span class="layer-info">
                             <span class="layer-name">Shootings</span>
                             <span class="layer-count" id="count-shootings">0</span>
+                        </span>
+                    </label>
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="layer-weather">
+                        <span class="layer-checkbox"></span>
+                        <span class="layer-color" style="color: var(--accent-blue);"></span>
+                        <span class="layer-info">
+                            <span class="layer-name">Precipitation</span>
+                            <span class="layer-count" id="count-weather">--</span>
                         </span>
                     </label>
                 </div>
@@ -196,6 +209,10 @@
                     <div class="legend-item">
                         <span class="legend-dot" style="color: var(--accent-red);"></span>
                         <span>Shooting</span>
+                    </div>
+                    <div class="legend-item" id="legend-precip" style="display: none;">
+                        <span class="legend-gradient"></span>
+                        <span>Precipitation (mm)</span>
                     </div>
                 </div>
             </div>
