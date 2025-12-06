@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",
+    "chart.js": "^4.5.1",
     "hono": "^4.10.7",
     "hyparquet": "^1.22.1",
     "postgres": "^3.4.7"

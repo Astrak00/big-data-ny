@@ -10,3 +10,5 @@ build/
 __pycache__/
 target/*
 target/
+*.csv
+*.zip

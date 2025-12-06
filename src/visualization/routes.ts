@@ -33,7 +33,7 @@ export function createApiRoutes(): Hono {
   // Taxi Trip Data
   // -------------------------------------------
   api.get("/taxi", async (c) => {
-    const limit = parseInt(c.req.query("limit") || "500");
+    const limit = parseInt(c.req.query("limit") || "1000");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
@@ -61,7 +61,7 @@ export function createApiRoutes(): Hono {
   // Bike Trip Data
   // -------------------------------------------
   api.get("/bike", async (c) => {
-    const limit = parseInt(c.req.query("limit") || "500");
+    const limit = parseInt(c.req.query("limit") || "1000");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
@@ -85,7 +85,7 @@ export function createApiRoutes(): Hono {
   // Arrests Data
   // -------------------------------------------
   api.get("/arrests", async (c) => {
-    const limit = parseInt(c.req.query("limit") || "500");
+    const limit = parseInt(c.req.query("limit") || "1000");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
@@ -109,7 +109,7 @@ export function createApiRoutes(): Hono {
   // Shooting Incident Data
   // -------------------------------------------
   api.get("/shootings", async (c) => {
-    const limit = parseInt(c.req.query("limit") || "500");
+    const limit = parseInt(c.req.query("limit") || "1000");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 

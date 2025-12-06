@@ -27,7 +27,7 @@ var state = {
 var COLORS = {
     taxi: '#f59e0b',
     bike: '#10b981',
-    arrests: '#ec4899',
+    arrests: '#C0C0C0',
     shootings: '#ef4444',
     blue: '#3b82f6'
 };
@@ -306,7 +306,8 @@ function populateLayers(data) {
     if (data.taxi && Array.isArray(data.taxi)) {
         data.taxi.forEach(function(trip) {
             try {
-                if (!trip.pickup_latitude || !trip.pickup_longitude) return;
+                if (trip.pickup_latitude === null || trip.pickup_latitude === undefined ||
+                    trip.pickup_longitude === null || trip.pickup_longitude === undefined) return;
                 
                 var marker = L.marker(
                     [trip.pickup_latitude, trip.pickup_longitude],
@@ -329,9 +330,12 @@ function populateLayers(data) {
     
     // Bike markers
     if (data.bike && Array.isArray(data.bike)) {
+        console.log('Processing ' + data.bike.length + ' bike trips');
+        var bikeMarkersAdded = 0;
         data.bike.forEach(function(trip) {
             try {
-                if (!trip.start_lat || !trip.start_lng) return;
+                if (trip.start_lat === null || trip.start_lat === undefined ||
+                    trip.start_lng === null || trip.start_lng === undefined) return;
                 
                 var marker = L.marker(
                     [trip.start_lat, trip.start_lng],
@@ -346,10 +350,12 @@ function populateLayers(data) {
                 ]));
                 
                 layers.bike.addLayer(marker);
+                bikeMarkersAdded++;
             } catch (e) {
                 console.error('Bike marker error:', e);
             }
         });
+        console.log('Added ' + bikeMarkersAdded + ' bike markers');
     }
     
     // Arrests markers
@@ -554,7 +560,7 @@ function updateMTAChart(mta, isSingleDay) {
                             color: '#666', 
                             font: { size: 10 },
                             callback: function(value) {
-                                return value + 'M';
+                                return parseFloat(value).toFixed(2) + 'M';
                             }
                         },
                         grid: { color: 'rgba(255,255,255,0.05)' }
@@ -677,11 +683,13 @@ async function loadData(startDate, endDate) {
         // Update date badge
         updateDateBadge(startDate, endDate);
         
-        // Update weather
-        await updateWeather(startDate, endDate);
+        // Update weather (basic info only, grid loaded on demand)
+        updateWeather(startDate, endDate);
         
-        // Load weather grid for overlay (use first date of range if range selected)
-        await loadWeatherGrid(startDate);
+        // Only load weather grid if overlay is already visible
+        if (weatherOverlayVisible) {
+            loadWeatherGrid(startDate);
+        }
         
         // Update map
         clearAllLayers();
@@ -744,8 +752,8 @@ async function initDatePickers() {
         var endPicker = getElement('end-date');
         
         // Default date range
-        var defaultStart = '2024-12-10';
-        var defaultEnd = '2024-12-24';
+        var defaultStart = '2024-12-01';
+        var defaultEnd = '2024-12-01';
         
         if (dates.min) {
             startPicker.min = dates.min;
@@ -861,7 +869,10 @@ function setupEventListeners() {
             if (weatherCheckbox.checked) {
                 map.addLayer(layers.weather);
                 weatherToggle.classList.add('active');
-                renderWeatherOverlay();
+                // Load weather grid on demand when user enables the layer
+                loadWeatherGrid(state.startDate).then(function() {
+                    renderWeatherOverlay();
+                });
             } else {
                 map.removeLayer(layers.weather);
                 weatherToggle.classList.remove('active');

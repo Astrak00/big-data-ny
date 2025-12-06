@@ -293,10 +293,10 @@ export async function loadBikeData(
     start_station_id: row.start_station_id,
     end_station_name: row.end_station_name,
     end_station_id: row.end_station_id,
-    start_lat: parseFloat(row.start_lat) || 0,
-    start_lng: parseFloat(row.start_lng) || 0,
-    end_lat: parseFloat(row.end_lat) || 0,
-    end_lng: parseFloat(row.end_lng) || 0,
+    start_lat: row.start_lat != null ? parseFloat(row.start_lat) : null,
+    start_lng: row.start_lng != null ? parseFloat(row.start_lng) : null,
+    end_lat: row.end_lat != null ? parseFloat(row.end_lat) : null,
+    end_lng: row.end_lng != null ? parseFloat(row.end_lng) : null,
     member_casual: row.member_casual,
   }));
 }
@@ -874,57 +874,47 @@ export async function fetchWeatherGrid(
   try {
     let maxPrecipitation = 0;
 
-    if (isHistorical && date) {
-      // Use archive API for historical data
-      // Fetch each point individually (Open-Meteo archive doesn't support multi-location)
-      for (let i = 0; i < lats.length; i++) {
-        const lat = lats[i];
-        const lon = lons[i];
+    // Fetch all points in parallel for much faster loading
+    const fetchPromises = lats.map(async (lat, i) => {
+      const lon = lons[i];
+      
+      if (isHistorical && date) {
         const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&daily=precipitation_sum,temperature_2m_mean&timezone=America%2FNew_York`;
-
         try {
           const response = await fetch(url);
           const data = await response.json();
-          const precip = data.daily?.precipitation_sum?.[0] || 0;
-          const temp = data.daily?.temperature_2m_mean?.[0] || 0;
-
-          points.push({
+          return {
             lat,
             lon,
-            precipitation: precip,
-            temperature: temp,
-          });
-
-          if (precip > maxPrecipitation) maxPrecipitation = precip;
+            precipitation: data.daily?.precipitation_sum?.[0] || 0,
+            temperature: data.daily?.temperature_2m_mean?.[0] || 0,
+          };
         } catch (e) {
-          points.push({ lat, lon, precipitation: 0, temperature: 0 });
+          return { lat, lon, precipitation: 0, temperature: 0 };
+        }
+      } else {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=precipitation,temperature_2m&timezone=America%2FNew_York`;
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+          return {
+            lat,
+            lon,
+            precipitation: data.current?.precipitation || 0,
+            temperature: data.current?.temperature_2m || 0,
+          };
+        } catch (e) {
+          return { lat, lon, precipitation: 0, temperature: 0 };
         }
       }
-    } else {
-      // Use forecast API for current/future data
-      // Fetch each point individually
-      for (let i = 0; i < lats.length; i++) {
-        const lat = lats[i];
-        const lon = lons[i];
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=precipitation,temperature_2m&timezone=America%2FNew_York`;
+    });
 
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
-          const precip = data.current?.precipitation || 0;
-          const temp = data.current?.temperature_2m || 0;
-
-          points.push({
-            lat,
-            lon,
-            precipitation: precip,
-            temperature: temp,
-          });
-
-          if (precip > maxPrecipitation) maxPrecipitation = precip;
-        } catch (e) {
-          points.push({ lat, lon, precipitation: 0, temperature: 0 });
-        }
+    const results = await Promise.all(fetchPromises);
+    
+    for (const point of results) {
+      points.push(point);
+      if (point.precipitation > maxPrecipitation) {
+        maxPrecipitation = point.precipitation;
       }
     }
 
