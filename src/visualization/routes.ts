@@ -1,6 +1,7 @@
 /**
  * NYC Urban Data Explorer - API Routes
  * =====================================
+ * Connects to PostgreSQL database for data
  */
 
 import { Hono } from "hono";
@@ -10,81 +11,16 @@ import {
   loadShootingData,
   loadMTAData,
   loadTaxiData,
+  getTaxiCount,
+  getBikeCount,
+  getArrestsCount,
+  getShootingsCount,
+  getArrestsByBorough,
+  getShootingsByBorough,
+  getDateRange,
   fetchWeatherData,
   fetchHistoricalWeather,
 } from "./data-loader";
-
-// ===========================================
-// Types
-// ===========================================
-type BikeData = ReturnType<typeof loadBikeData>;
-type ArrestsData = ReturnType<typeof loadArrestsData>;
-type ShootingData = ReturnType<typeof loadShootingData>;
-type MTAData = ReturnType<typeof loadMTAData>;
-type TaxiData = ReturnType<typeof loadTaxiData>;
-
-// ===========================================
-// Data Cache
-// ===========================================
-let bikeDataCache: BikeData | null = null;
-let arrestsDataCache: ArrestsData | null = null;
-let shootingDataCache: ShootingData | null = null;
-let mtaDataCache: MTAData | null = null;
-let taxiDataCache: TaxiData | null = null;
-
-// ===========================================
-// Helper Functions
-// ===========================================
-
-/**
- * Parse date from various formats to YYYY-MM-DD
- */
-function parseDate(dateStr: string): string {
-  if (dateStr.includes("T")) {
-    return dateStr.split("T")[0];
-  }
-  if (dateStr.includes(" ")) {
-    return dateStr.split(" ")[0];
-  }
-  return dateStr;
-}
-
-/**
- * Check if a date matches a single date filter
- */
-function matchesDate(itemDate: string | undefined, filterDate: string): boolean {
-  if (!itemDate || !filterDate) return true;
-  const itemDateParsed = parseDate(itemDate);
-  return itemDateParsed === filterDate;
-}
-
-/**
- * Check if a date falls within a date range
- */
-function matchesDateRange(
-  itemDate: string | undefined,
-  startDate: string | undefined,
-  endDate: string | undefined
-): boolean {
-  if (!itemDate) return false;
-  const itemDateParsed = parseDate(itemDate);
-
-  if (startDate && endDate) {
-    return itemDateParsed >= startDate && itemDateParsed <= endDate;
-  } else if (startDate) {
-    return itemDateParsed === startDate;
-  }
-  return true;
-}
-
-/**
- * Convert MTA date format (MM/DD/YYYY) to YYYY-MM-DD
- */
-function mtaDateToISO(mtaDate: string): string | null {
-  const parts = mtaDate.split("/");
-  if (parts.length !== 3) return null;
-  return `${parts[2]}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
-}
 
 // ===========================================
 // Create Router
@@ -93,146 +29,128 @@ export function createApiRoutes(): Hono {
   const api = new Hono();
 
   // -------------------------------------------
-  // Bike Trip Data
+  // Taxi Trip Data
   // -------------------------------------------
-  api.get("/bike", (c) => {
+  api.get("/taxi", async (c) => {
     const limit = parseInt(c.req.query("limit") || "500");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!bikeDataCache) {
-      bikeDataCache = loadBikeData(5000);
-    }
+    try {
+      const data = await loadTaxiData(limit, startDate, endDate);
+      const total = await getTaxiCount(startDate, endDate);
 
-    let data = bikeDataCache;
-    if (startDate) {
-      data = data.filter((trip) =>
-        matchesDateRange(trip.started_at, startDate, endDate)
-      );
+      return c.json({
+        success: true,
+        count: data.length,
+        total: total,
+        data: data.map((trip) => ({
+          ...trip,
+          tpep_pickup_datetime: trip.pickup_datetime,
+          tpep_dropoff_datetime: trip.dropoff_datetime,
+        })),
+      });
+    } catch (error) {
+      console.error("Error loading taxi data:", error);
+      return c.json({ success: false, error: "Failed to load taxi data", data: [] }, 500);
     }
-
-    return c.json({
-      success: true,
-      count: Math.min(limit, data.length),
-      total: data.length,
-      data: data.slice(0, limit),
-    });
   });
 
   // -------------------------------------------
-  // Taxi Trip Data
+  // Bike Trip Data
   // -------------------------------------------
-  api.get("/taxi", (c) => {
+  api.get("/bike", async (c) => {
     const limit = parseInt(c.req.query("limit") || "500");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!taxiDataCache) {
-      taxiDataCache = loadTaxiData(5000);
-    }
+    try {
+      const data = await loadBikeData(limit, startDate, endDate);
+      const total = await getBikeCount(startDate, endDate);
 
-    let data = taxiDataCache;
-    if (startDate) {
-      data = data.filter((trip) =>
-        matchesDateRange(trip.tpep_pickup_datetime, startDate, endDate)
-      );
+      return c.json({
+        success: true,
+        count: data.length,
+        total: total,
+        data: data,
+      });
+    } catch (error) {
+      console.error("Error loading bike data:", error);
+      return c.json({ success: false, error: "Failed to load bike data", data: [] }, 500);
     }
-
-    return c.json({
-      success: true,
-      count: Math.min(limit, data.length),
-      total: data.length,
-      data: data.slice(0, limit),
-    });
   });
 
   // -------------------------------------------
   // Arrests Data
   // -------------------------------------------
-  api.get("/arrests", (c) => {
+  api.get("/arrests", async (c) => {
     const limit = parseInt(c.req.query("limit") || "500");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!arrestsDataCache) {
-      arrestsDataCache = loadArrestsData(1000);
-    }
+    try {
+      const data = await loadArrestsData(limit, startDate, endDate);
+      const total = await getArrestsCount(startDate, endDate);
 
-    let data = arrestsDataCache;
-    if (startDate) {
-      data = data.filter((arrest) =>
-        matchesDateRange(arrest.properties.arrest_date, startDate, endDate)
-      );
+      return c.json({
+        success: true,
+        count: data.length,
+        total: total,
+        data: data,
+      });
+    } catch (error) {
+      console.error("Error loading arrests data:", error);
+      return c.json({ success: false, error: "Failed to load arrests data", data: [] }, 500);
     }
-
-    return c.json({
-      success: true,
-      count: Math.min(limit, data.length),
-      total: data.length,
-      data: data.slice(0, limit),
-    });
   });
 
   // -------------------------------------------
   // Shooting Incident Data
   // -------------------------------------------
-  api.get("/shootings", (c) => {
+  api.get("/shootings", async (c) => {
     const limit = parseInt(c.req.query("limit") || "500");
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!shootingDataCache) {
-      shootingDataCache = loadShootingData(1000);
-    }
+    try {
+      const data = await loadShootingData(limit, startDate, endDate);
+      const total = await getShootingsCount(startDate, endDate);
 
-    let data = shootingDataCache;
-    if (startDate) {
-      data = data.filter((shooting) =>
-        matchesDateRange(shooting.properties.occur_date, startDate, endDate)
-      );
+      return c.json({
+        success: true,
+        count: data.length,
+        total: total,
+        data: data,
+      });
+    } catch (error) {
+      console.error("Error loading shootings data:", error);
+      return c.json({ success: false, error: "Failed to load shootings data", data: [] }, 500);
     }
-
-    return c.json({
-      success: true,
-      count: Math.min(limit, data.length),
-      total: data.length,
-      data: data.slice(0, limit),
-    });
   });
 
   // -------------------------------------------
   // MTA Ridership Data
   // -------------------------------------------
-  api.get("/mta", (c) => {
+  api.get("/mta", async (c) => {
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!mtaDataCache) {
-      mtaDataCache = loadMTAData();
-    }
+    try {
+      const data = await loadMTAData(startDate, endDate);
 
-    let data = mtaDataCache;
-    if (startDate) {
-      data = data.filter((d) => {
-        const mtaDateFormatted = mtaDateToISO(d.date);
-        if (!mtaDateFormatted) return false;
-
-        if (endDate) {
-          return mtaDateFormatted >= startDate && mtaDateFormatted <= endDate;
-        }
-        return mtaDateFormatted === startDate;
+      return c.json({
+        success: true,
+        count: data.length,
+        data: data,
       });
+    } catch (error) {
+      console.error("Error loading MTA data:", error);
+      return c.json({ success: false, error: "Failed to load MTA data", data: [] }, 500);
     }
-
-    return c.json({
-      success: true,
-      count: data.length,
-      data: data,
-    });
   });
 
   // -------------------------------------------
-  // Weather Data
+  // Weather Data (real-time, not from DB)
   // -------------------------------------------
   api.get("/weather", async (c) => {
     const lat = parseFloat(c.req.query("lat") || "40.7128");
@@ -277,155 +195,110 @@ export function createApiRoutes(): Hono {
   // -------------------------------------------
   // Aggregate Data by Borough
   // -------------------------------------------
-  api.get("/aggregate", (c) => {
+  api.get("/aggregate", async (c) => {
     const startDate = c.req.query("startDate") || c.req.query("date");
     const endDate = c.req.query("endDate");
 
-    if (!arrestsDataCache) arrestsDataCache = loadArrestsData(1000);
-    if (!shootingDataCache) shootingDataCache = loadShootingData(1000);
+    try {
+      const arrestsByBoro = await getArrestsByBorough(startDate, endDate);
+      const shootingsByBoro = await getShootingsByBorough(startDate, endDate);
 
-    let arrests = arrestsDataCache;
-    let shootings = shootingDataCache;
-
-    if (startDate) {
-      arrests = arrests.filter((arrest) =>
-        matchesDateRange(arrest.properties.arrest_date, startDate, endDate)
-      );
-      shootings = shootings.filter((shooting) =>
-        matchesDateRange(shooting.properties.occur_date, startDate, endDate)
-      );
+      return c.json({
+        success: true,
+        data: {
+          arrestsByBoro,
+          shootingsByBoro,
+        },
+      });
+    } catch (error) {
+      console.error("Error loading aggregate data:", error);
+      return c.json({
+        success: false,
+        error: "Failed to load aggregate data",
+        data: { arrestsByBoro: {}, shootingsByBoro: {} },
+      }, 500);
     }
-
-    const boroMap: Record<string, string> = {
-      M: "Manhattan",
-      K: "Brooklyn",
-      Q: "Queens",
-      B: "Bronx",
-      S: "Staten Island",
-    };
-
-    // Aggregate arrests by borough
-    const arrestsByBoro: Record<string, number> = {};
-    arrests.forEach((arrest) => {
-      const boro = boroMap[arrest.properties.arrest_boro] || "Unknown";
-      arrestsByBoro[boro] = (arrestsByBoro[boro] || 0) + 1;
-    });
-
-    // Aggregate shootings by borough
-    const shootingsByBoro: Record<string, number> = {};
-    shootings.forEach((shooting) => {
-      const boro = shooting.properties.boro || "Unknown";
-      shootingsByBoro[boro] = (shootingsByBoro[boro] || 0) + 1;
-    });
-
-    // Aggregate arrests by offense
-    const arrestsByOffense: Record<string, number> = {};
-    arrests.forEach((arrest) => {
-      const offense = arrest.properties.ofns_desc || "Unknown";
-      arrestsByOffense[offense] = (arrestsByOffense[offense] || 0) + 1;
-    });
-
-    return c.json({
-      success: true,
-      data: {
-        arrestsByBoro,
-        shootingsByBoro,
-        arrestsByOffense,
-      },
-    });
   });
 
   // -------------------------------------------
   // Available Dates
   // -------------------------------------------
-  api.get("/dates", (c) => {
-    if (!bikeDataCache) bikeDataCache = loadBikeData(5000);
-    if (!arrestsDataCache) arrestsDataCache = loadArrestsData(1000);
-    if (!shootingDataCache) shootingDataCache = loadShootingData(1000);
-    if (!mtaDataCache) mtaDataCache = loadMTAData();
+  api.get("/dates", async (c) => {
+    try {
+      const dateRange = await getDateRange();
 
-    const dates = new Set<string>();
-
-    bikeDataCache.forEach((trip) => {
-      const date = parseDate(trip.started_at);
-      if (date) dates.add(date);
-    });
-
-    arrestsDataCache.forEach((arrest) => {
-      const date = parseDate(arrest.properties.arrest_date);
-      if (date) dates.add(date);
-    });
-
-    shootingDataCache.forEach((shooting) => {
-      const date = parseDate(shooting.properties.occur_date);
-      if (date) dates.add(date);
-    });
-
-    mtaDataCache.forEach((mta) => {
-      const date = mtaDateToISO(mta.date);
-      if (date) dates.add(date);
-    });
-
-    const sortedDates = Array.from(dates).sort();
-
-    return c.json({
-      success: true,
-      data: sortedDates,
-      min: sortedDates[0],
-      max: sortedDates[sortedDates.length - 1],
-    });
+      return c.json({
+        success: true,
+        min: dateRange.min,
+        max: dateRange.max,
+      });
+    } catch (error) {
+      console.error("Error loading date range:", error);
+      return c.json({
+        success: false,
+        min: "2020-01-01",
+        max: new Date().toISOString().split("T")[0],
+      });
+    }
   });
 
   // -------------------------------------------
   // Data Summary
   // -------------------------------------------
-  api.get("/summary", (c) => {
-    const date = c.req.query("date");
+  api.get("/summary", async (c) => {
+    const startDate = c.req.query("startDate") || c.req.query("date");
+    const endDate = c.req.query("endDate");
 
-    if (!bikeDataCache) bikeDataCache = loadBikeData(5000);
-    if (!arrestsDataCache) arrestsDataCache = loadArrestsData(1000);
-    if (!shootingDataCache) shootingDataCache = loadShootingData(1000);
-    if (!mtaDataCache) mtaDataCache = loadMTAData();
-    if (!taxiDataCache) taxiDataCache = loadTaxiData(5000);
+    try {
+      const [taxiCount, bikeCount, arrestsCount, shootingsCount, mtaData] =
+        await Promise.all([
+          getTaxiCount(startDate, endDate),
+          getBikeCount(startDate, endDate),
+          getArrestsCount(startDate, endDate),
+          getShootingsCount(startDate, endDate),
+          loadMTAData(startDate, endDate),
+        ]);
 
-    let bikeCount = bikeDataCache.length;
-    let taxiCount = taxiDataCache.length;
-    let arrestsCount = arrestsDataCache.length;
-    let shootingsCount = shootingDataCache.length;
-    let mtaData = mtaDataCache;
-
-    if (date) {
-      bikeCount = bikeDataCache.filter((trip) =>
-        matchesDate(trip.started_at, date)
-      ).length;
-      taxiCount = taxiDataCache.filter((trip) =>
-        matchesDate(trip.tpep_pickup_datetime, date)
-      ).length;
-      arrestsCount = arrestsDataCache.filter((arrest) =>
-        matchesDate(arrest.properties.arrest_date, date)
-      ).length;
-      shootingsCount = shootingDataCache.filter((shooting) =>
-        matchesDate(shooting.properties.occur_date, date)
-      ).length;
-
-      const [year, month, day] = date.split("-");
-      const mtaDate = `${month}/${day}/${year}`;
-      mtaData = mtaDataCache.filter((d) => d.date === mtaDate);
-    }
-
-    return c.json({
-      success: true,
-      data: {
-        bike: { count: bikeCount },
-        taxi: { count: taxiCount },
-        arrests: { count: arrestsCount },
-        shootings: { count: shootingsCount },
-        mta: {
-          count: mtaData.length,
-          data: mtaData[0] || null,
+      return c.json({
+        success: true,
+        data: {
+          taxi: { count: taxiCount },
+          bike: { count: bikeCount },
+          arrests: { count: arrestsCount },
+          shootings: { count: shootingsCount },
+          mta: {
+            count: mtaData.length,
+            data: mtaData[0] || null,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.error("Error loading summary:", error);
+      return c.json({
+        success: false,
+        error: "Failed to load summary",
+        data: {
+          taxi: { count: 0 },
+          bike: { count: 0 },
+          arrests: { count: 0 },
+          shootings: { count: 0 },
+          mta: { count: 0, data: null },
+        },
+      }, 500);
+    }
+  });
+
+  // -------------------------------------------
+  // Health Check
+  // -------------------------------------------
+  api.get("/health", async (c) => {
+    try {
+      // Quick database check
+      await getTaxiCount();
+      return c.json({ status: "healthy", database: "connected" });
+    } catch (error) {
+      return c.json({ status: "unhealthy", database: "disconnected" }, 500);
+    }
   });
 
   return api;

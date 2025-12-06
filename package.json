@@ -3,12 +3,17 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "bun run --hot src/visualization/server.ts",
-    "start": "bun run src/visualization/server.ts"
+    "start": "bun run src/visualization/server.ts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "etl:build": "cd src/etl && cargo build --release",
+    "etl:all": "cd src/etl && cargo run --release -- all --data-dir ../../data_trunc",
+    "etl:download": "cd src/etl && cargo run --release -- download --output-dir ../../data"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",
-    "apache-arrow": "^21.1.0",
     "hono": "^4.10.7",
-    "parquet-wasm": "^0.7.1"
+    "postgres": "^3.4.7"
   }
 }

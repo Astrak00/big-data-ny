@@ -1,11 +1,41 @@
-import { readFileSync } from "fs";
-import { join } from "path";
-import { readParquet } from "parquet-wasm";
-import { tableFromIPC } from "apache-arrow";
+/**
+ * NYC Urban Data Explorer - Database Data Loader
+ * ================================================
+ * Loads data from PostgreSQL database instead of files
+ */
 
-const DATA_DIR = join(import.meta.dir, "../../data_trunc");
+import postgres from "postgres";
+
+// Database connection
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgres://nyc_user:nyc_password@localhost:5432/nyc_urban_data";
+
+const sql = postgres(DATABASE_URL);
+
+// ===========================================
+// Types
+// ===========================================
+
+export interface TaxiTrip {
+  id: number;
+  vendor_id: number;
+  pickup_datetime: string;
+  dropoff_datetime: string;
+  passenger_count: number;
+  trip_distance: number;
+  pickup_longitude: number;
+  pickup_latitude: number;
+  dropoff_longitude: number;
+  dropoff_latitude: number;
+  pickup_location_id: number;
+  dropoff_location_id: number;
+  fare_amount: number;
+  total_amount: number;
+}
 
 export interface BikeTrip {
+  id: number;
   ride_id: string;
   rideable_type: string;
   started_at: string;
@@ -21,23 +51,8 @@ export interface BikeTrip {
   member_casual: string;
 }
 
-export interface TaxiTrip {
-  VendorID: number;
-  tpep_pickup_datetime: string;
-  tpep_dropoff_datetime: string;
-  passenger_count: number;
-  trip_distance: number;
-  pickup_longitude: number;
-  pickup_latitude: number;
-  dropoff_longitude: number;
-  dropoff_latitude: number;
-  PULocationID: number;
-  DOLocationID: number;
-  fare_amount: number;
-  total_amount: number;
-}
-
 export interface Arrest {
+  id: number;
   type: "arrest";
   coordinates: [number, number];
   properties: {
@@ -53,6 +68,7 @@ export interface Arrest {
 }
 
 export interface Shooting {
+  id: number;
   type: "shooting";
   coordinates: [number, number];
   properties: {
@@ -85,260 +101,591 @@ export interface MTARidership {
   staten_island_railway: number;
 }
 
-// Parse CSV helper
-function parseCSV(content: string): string[][] {
-  const lines = content.trim().split("\n");
-  return lines.map((line) => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (const char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  });
-}
+// ===========================================
+// Data Loading Functions
+// ===========================================
 
-// Load bike data
-export function loadBikeData(limit = 1000): BikeTrip[] {
-  const filePath = join(DATA_DIR, "JC-202412-citibike-tripdata.csv");
-  const content = readFileSync(filePath, "utf-8");
-  const rows = parseCSV(content);
-  const headers = rows[0];
+export async function loadTaxiData(
+  limit: number = 1000,
+  startDate?: string,
+  endDate?: string
+): Promise<TaxiTrip[]> {
+  let query = sql`
+    SELECT 
+      id,
+      vendor_id,
+      pickup_datetime,
+      dropoff_datetime,
+      passenger_count,
+      trip_distance,
+      ST_X(pickup_point) as pickup_longitude,
+      ST_Y(pickup_point) as pickup_latitude,
+      ST_X(dropoff_point) as dropoff_longitude,
+      ST_Y(dropoff_point) as dropoff_latitude,
+      pickup_location_id,
+      dropoff_location_id,
+      fare_amount,
+      total_amount
+    FROM taxi_trips
+    WHERE 1=1
+  `;
 
-  return rows
-    .slice(1, limit + 1)
-    .map((row) => ({
-      ride_id: row[0],
-      rideable_type: row[1],
-      started_at: row[2],
-      ended_at: row[3],
-      start_station_name: row[4],
-      start_station_id: row[5],
-      end_station_name: row[6],
-      end_station_id: row[7],
-      start_lat: parseFloat(row[8]),
-      start_lng: parseFloat(row[9]),
-      end_lat: parseFloat(row[10]),
-      end_lng: parseFloat(row[11]),
-      member_casual: row[12],
-    }))
-    .filter((trip) => !isNaN(trip.start_lat) && !isNaN(trip.start_lng));
-}
+  if (startDate && endDate) {
+    query = sql`
+      SELECT 
+        id, vendor_id, pickup_datetime, dropoff_datetime,
+        passenger_count, trip_distance,
+        ST_X(pickup_point) as pickup_longitude,
+        ST_Y(pickup_point) as pickup_latitude,
+        ST_X(dropoff_point) as dropoff_longitude,
+        ST_Y(dropoff_point) as dropoff_latitude,
+        pickup_location_id, dropoff_location_id,
+        fare_amount, total_amount
+      FROM taxi_trips
+      WHERE pickup_datetime::date >= ${startDate}::date
+        AND pickup_datetime::date <= ${endDate}::date
+      ORDER BY pickup_datetime DESC
+      LIMIT ${limit}
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT 
+        id, vendor_id, pickup_datetime, dropoff_datetime,
+        passenger_count, trip_distance,
+        ST_X(pickup_point) as pickup_longitude,
+        ST_Y(pickup_point) as pickup_latitude,
+        ST_X(dropoff_point) as dropoff_longitude,
+        ST_Y(dropoff_point) as dropoff_latitude,
+        pickup_location_id, dropoff_location_id,
+        fare_amount, total_amount
+      FROM taxi_trips
+      WHERE pickup_datetime::date = ${startDate}::date
+      ORDER BY pickup_datetime DESC
+      LIMIT ${limit}
+    `;
+  } else {
+    query = sql`
+      SELECT 
+        id, vendor_id, pickup_datetime, dropoff_datetime,
+        passenger_count, trip_distance,
+        ST_X(pickup_point) as pickup_longitude,
+        ST_Y(pickup_point) as pickup_latitude,
+        ST_X(dropoff_point) as dropoff_longitude,
+        ST_Y(dropoff_point) as dropoff_latitude,
+        pickup_location_id, dropoff_location_id,
+        fare_amount, total_amount
+      FROM taxi_trips
+      ORDER BY pickup_datetime DESC
+      LIMIT ${limit}
+    `;
+  }
 
-// Load arrests data
-export function loadArrestsData(limit = 1000): Arrest[] {
-  const filePath = join(DATA_DIR, "NYPD_Arrests_Data_1000.geojson");
-  const content = readFileSync(filePath, "utf-8");
-  const geojson = JSON.parse(content);
+  const rows = await query;
 
-  return geojson.features
-    .filter((feature: any) => feature.geometry && feature.geometry.coordinates)
-    .slice(0, limit)
-    .map((feature: any) => ({
-      type: "arrest" as const,
-      coordinates: feature.geometry.coordinates as [number, number],
-      properties: {
-        perp_sex: feature.properties.perp_sex,
-        age_group: feature.properties.age_group,
-        arrest_boro: feature.properties.arrest_boro,
-        ofns_desc: feature.properties.ofns_desc,
-        pd_desc: feature.properties.pd_desc,
-        perp_race: feature.properties.perp_race,
-        arrest_date: feature.properties.arrest_date,
-        arrest_precinct: feature.properties.arrest_precinct,
-      },
-    }));
-}
-
-// Load shooting data
-export function loadShootingData(limit = 1000): Shooting[] {
-  const filePath = join(DATA_DIR, "NYPD_Shooting_Incident_Data_1000.geojson");
-  const content = readFileSync(filePath, "utf-8");
-  const geojson = JSON.parse(content);
-
-  return geojson.features
-    .filter((feature: any) => feature.geometry && feature.geometry.coordinates)
-    .slice(0, limit)
-    .map((feature: any) => ({
-      type: "shooting" as const,
-      coordinates: feature.geometry.coordinates as [number, number],
-      properties: {
-        perp_sex: feature.properties.perp_sex,
-        perp_age_group: feature.properties.perp_age_group,
-        perp_race: feature.properties.perp_race,
-        vic_sex: feature.properties.vic_sex,
-        vic_age_group: feature.properties.vic_age_group,
-        vic_race: feature.properties.vic_race,
-        boro: feature.properties.boro,
-        precinct: feature.properties.precinct,
-        occur_date: feature.properties.occur_date,
-        occur_time: feature.properties.occur_time,
-        statistical_murder_flag: feature.properties.statistical_murder_flag,
-        loc_of_occur_desc: feature.properties.loc_of_occur_desc,
-        loc_classfctn_desc: feature.properties.loc_classfctn_desc,
-      },
-    }));
-}
-
-// Load MTA ridership data
-export function loadMTAData(): MTARidership[] {
-  const filePath = join(
-    DATA_DIR,
-    "MTA_Daily_Ridership_Data__2020_-_2025_20251206.csv"
-  );
-  const content = readFileSync(filePath, "utf-8");
-  const rows = parseCSV(content);
-
-  return rows.slice(1).map((row) => ({
-    date: row[0],
-    subways_ridership: parseInt(row[1]?.replace(/,/g, "") || "0"),
-    subways_percent: parseInt(row[2]?.replace("%", "") || "0"),
-    buses_ridership: parseInt(row[3]?.replace(/,/g, "") || "0"),
-    buses_percent: parseInt(row[4]?.replace("%", "") || "0"),
-    lirr_ridership: parseInt(row[5]?.replace(/,/g, "") || "0"),
-    metro_north_ridership: parseInt(row[7]?.replace(/,/g, "") || "0"),
-    access_a_ride_trips: parseInt(row[9]?.replace(/,/g, "") || "0"),
-    bridges_tunnels_traffic: parseInt(row[11]?.replace(/,/g, "") || "0"),
-    staten_island_railway: parseInt(row[13]?.replace(/,/g, "") || "0"),
+  return rows.map((row: any) => ({
+    id: row.id,
+    vendor_id: row.vendor_id,
+    pickup_datetime: row.pickup_datetime?.toISOString?.() || row.pickup_datetime,
+    dropoff_datetime: row.dropoff_datetime?.toISOString?.() || row.dropoff_datetime,
+    passenger_count: row.passenger_count,
+    trip_distance: parseFloat(row.trip_distance) || 0,
+    pickup_longitude: parseFloat(row.pickup_longitude) || 0,
+    pickup_latitude: parseFloat(row.pickup_latitude) || 0,
+    dropoff_longitude: parseFloat(row.dropoff_longitude) || 0,
+    dropoff_latitude: parseFloat(row.dropoff_latitude) || 0,
+    pickup_location_id: row.pickup_location_id,
+    dropoff_location_id: row.dropoff_location_id,
+    fare_amount: parseFloat(row.fare_amount) || 0,
+    total_amount: parseFloat(row.total_amount) || 0,
   }));
 }
 
-// NYC Taxi Zone centroids for mapping zone IDs to coordinates
-const TAXI_ZONES: Record<number, [number, number]> = {
-  1: [-74.174, 40.693], // Newark Airport
-  4: [-73.985, 40.723], // Alphabet City
-  7: [-73.926, 40.763], // Astoria
-  12: [-74.016, 40.703], // Battery Park
-  13: [-74.015, 40.712], // Battery Park City
-  24: [-73.964, 40.802], // Bloomingdale
-  33: [-73.905, 40.854], // Borough Park - Bronx area
-  41: [-73.942, 40.816], // Central Harlem North
-  42: [-73.937, 40.808], // Central Harlem South
-  43: [-73.968, 40.773], // Central Park
-  45: [-73.998, 40.714], // Chinatown
-  48: [-73.989, 40.763], // Clinton East
-  50: [-73.996, 40.764], // Clinton West
-  68: [-73.996, 40.748], // East Chelsea
-  74: [-73.938, 40.803], // East Harlem North
-  75: [-73.944, 40.793], // East Harlem South
-  79: [-73.983, 40.727], // East Village
-  87: [-74.009, 40.709], // Financial District North
-  88: [-74.005, 40.704], // Financial District South
-  90: [-73.988, 40.741], // Flatiron
-  100: [-73.991, 40.754], // Garment District
-  107: [-73.982, 40.738], // Gramercy
-  113: [-73.997, 40.735], // Greenwich Village North
-  114: [-74.001, 40.729], // Greenwich Village South
-  125: [-74.006, 40.727], // Hudson Sq
-  127: [-73.924, 40.867], // Inwood
-  128: [-73.789, 40.647], // JFK Airport
-  132: [-73.978, 40.742], // Kips Bay
-  137: [-73.875, 40.778], // LaGuardia Airport
-  138: [-73.958, 40.768], // Lenox Hill East
-  140: [-73.965, 40.768], // Lenox Hill West
-  141: [-73.983, 40.773], // Lincoln Square East
-  142: [-73.987, 40.773], // Lincoln Square West
-  143: [-73.996, 40.723], // Little Italy/NoLiTa
-  144: [-73.942, 40.746], // Long Island City/Queens Plaza
-  148: [-73.983, 40.715], // Lower East Side
-  151: [-73.976, 40.798], // Manhattan Valley
-  152: [-73.954, 40.816], // Manhattanville
-  158: [-74.006, 40.739], // Meatpacking/West Village West
-  161: [-73.982, 40.754], // Midtown Center
-  162: [-73.972, 40.757], // Midtown East
-  163: [-73.977, 40.764], // Midtown North
-  164: [-73.988, 40.751], // Midtown South
-  166: [-73.959, 40.809], // Morningside Heights
-  170: [-73.976, 40.748], // Murray Hill
-  186: [-73.992, 40.749], // Penn Station/Madison Sq West
-  209: [-73.951, 40.761], // Roosevelt Island
-  211: [-74.001, 40.723], // SoHo
-  224: [-73.976, 40.732], // Stuy Town/PCV
-  229: [-73.967, 40.756], // Sutton Place/Turtle Bay North
-  230: [-73.985, 40.757], // Times Sq/Theatre District
-  231: [-74.009, 40.717], // TriBeCa/Civic Center
-  232: [-73.987, 40.713], // Two Bridges/Seward Park
-  233: [-73.969, 40.750], // UN/Turtle Bay South
-  234: [-73.990, 40.735], // Union Sq
-  236: [-73.953, 40.776], // Upper East Side North
-  237: [-73.959, 40.768], // Upper East Side South
-  238: [-73.978, 40.787], // Upper West Side North
-  239: [-73.980, 40.779], // Upper West Side South
-  243: [-73.938, 40.852], // Washington Heights North
-  244: [-73.939, 40.839], // Washington Heights South
-  246: [-74.003, 40.749], // West Chelsea/Hudson Yards
-  249: [-74.007, 40.734], // West Village
-  261: [-74.013, 40.712], // World Trade Center
-  262: [-73.948, 40.781], // Yorkville East
-  263: [-73.953, 40.780], // Yorkville West
-  264: [-73.776, 40.645], // NaN (Unknown - default to JFK area)
-  265: [-73.776, 40.645], // NA (Unknown)
-};
+export async function getTaxiCount(
+  startDate?: string,
+  endDate?: string
+): Promise<number> {
+  let result;
 
-// Load taxi data from parquet file
-export function loadTaxiData(limit = 1000): TaxiTrip[] {
-  const filePath = join(DATA_DIR, "yellow_tripdata_2024-12.parquet");
-  const buffer = readFileSync(filePath);
-  const wasmTable = readParquet(buffer);
-  const ipcStream = wasmTable.intoIPCStream();
-  const arrowTable = tableFromIPC(ipcStream);
-
-  const trips: TaxiTrip[] = [];
-  const numRows = Math.min(limit, arrowTable.numRows);
-
-  // Get columns
-  const vendorCol = arrowTable.getChild("VendorID");
-  const pickupCol = arrowTable.getChild("tpep_pickup_datetime");
-  const dropoffCol = arrowTable.getChild("tpep_dropoff_datetime");
-  const passengerCol = arrowTable.getChild("passenger_count");
-  const distanceCol = arrowTable.getChild("trip_distance");
-  const puLocationCol = arrowTable.getChild("PULocationID");
-  const doLocationCol = arrowTable.getChild("DOLocationID");
-  const fareCol = arrowTable.getChild("fare_amount");
-  const totalCol = arrowTable.getChild("total_amount");
-
-  for (let i = 0; i < numRows; i++) {
-    const puZone = Number(puLocationCol?.get(i) ?? 0);
-    const doZone = Number(doLocationCol?.get(i) ?? 0);
-
-    // Get coordinates from zone lookup, fallback to Manhattan center
-    const puCoords = TAXI_ZONES[puZone] || [-73.98, 40.75];
-    const doCoords = TAXI_ZONES[doZone] || [-73.98, 40.75];
-
-    // Convert timestamp (milliseconds) to ISO string
-    const pickupTs = Number(pickupCol?.get(i) ?? 0);
-    const dropoffTs = Number(dropoffCol?.get(i) ?? 0);
-
-    trips.push({
-      VendorID: Number(vendorCol?.get(i) ?? 0),
-      tpep_pickup_datetime: new Date(pickupTs).toISOString(),
-      tpep_dropoff_datetime: new Date(dropoffTs).toISOString(),
-      passenger_count: Number(passengerCol?.get(i) ?? 0),
-      trip_distance: Number(distanceCol?.get(i) ?? 0),
-      pickup_longitude: puCoords[0],
-      pickup_latitude: puCoords[1],
-      dropoff_longitude: doCoords[0],
-      dropoff_latitude: doCoords[1],
-      PULocationID: puZone,
-      DOLocationID: doZone,
-      fare_amount: Number(fareCol?.get(i) ?? 0),
-      total_amount: Number(totalCol?.get(i) ?? 0),
-    });
+  if (startDate && endDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM taxi_trips
+      WHERE pickup_datetime::date >= ${startDate}::date
+        AND pickup_datetime::date <= ${endDate}::date
+    `;
+  } else if (startDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM taxi_trips
+      WHERE pickup_datetime::date = ${startDate}::date
+    `;
+  } else {
+    result = await sql`SELECT COUNT(*) as count FROM taxi_trips`;
   }
 
-  return trips;
+  return parseInt(result[0]?.count || "0");
 }
 
-// Weather data fetcher using Open-Meteo API (free, no key needed)
+export async function loadBikeData(
+  limit: number = 1000,
+  startDate?: string,
+  endDate?: string
+): Promise<BikeTrip[]> {
+  let query;
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT 
+        id, ride_id, rideable_type, started_at, ended_at,
+        start_station_name, start_station_id,
+        end_station_name, end_station_id,
+        ST_X(start_point) as start_lng,
+        ST_Y(start_point) as start_lat,
+        ST_X(end_point) as end_lng,
+        ST_Y(end_point) as end_lat,
+        member_casual
+      FROM bike_trips
+      WHERE started_at::date >= ${startDate}::date
+        AND started_at::date <= ${endDate}::date
+      ORDER BY started_at DESC
+      LIMIT ${limit}
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT 
+        id, ride_id, rideable_type, started_at, ended_at,
+        start_station_name, start_station_id,
+        end_station_name, end_station_id,
+        ST_X(start_point) as start_lng,
+        ST_Y(start_point) as start_lat,
+        ST_X(end_point) as end_lng,
+        ST_Y(end_point) as end_lat,
+        member_casual
+      FROM bike_trips
+      WHERE started_at::date = ${startDate}::date
+      ORDER BY started_at DESC
+      LIMIT ${limit}
+    `;
+  } else {
+    query = sql`
+      SELECT 
+        id, ride_id, rideable_type, started_at, ended_at,
+        start_station_name, start_station_id,
+        end_station_name, end_station_id,
+        ST_X(start_point) as start_lng,
+        ST_Y(start_point) as start_lat,
+        ST_X(end_point) as end_lng,
+        ST_Y(end_point) as end_lat,
+        member_casual
+      FROM bike_trips
+      ORDER BY started_at DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  const rows = await query;
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ride_id: row.ride_id,
+    rideable_type: row.rideable_type,
+    started_at: row.started_at?.toISOString?.() || row.started_at,
+    ended_at: row.ended_at?.toISOString?.() || row.ended_at,
+    start_station_name: row.start_station_name,
+    start_station_id: row.start_station_id,
+    end_station_name: row.end_station_name,
+    end_station_id: row.end_station_id,
+    start_lat: parseFloat(row.start_lat) || 0,
+    start_lng: parseFloat(row.start_lng) || 0,
+    end_lat: parseFloat(row.end_lat) || 0,
+    end_lng: parseFloat(row.end_lng) || 0,
+    member_casual: row.member_casual,
+  }));
+}
+
+export async function getBikeCount(
+  startDate?: string,
+  endDate?: string
+): Promise<number> {
+  let result;
+
+  if (startDate && endDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM bike_trips
+      WHERE started_at::date >= ${startDate}::date
+        AND started_at::date <= ${endDate}::date
+    `;
+  } else if (startDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM bike_trips
+      WHERE started_at::date = ${startDate}::date
+    `;
+  } else {
+    result = await sql`SELECT COUNT(*) as count FROM bike_trips`;
+  }
+
+  return parseInt(result[0]?.count || "0");
+}
+
+export async function loadArrestsData(
+  limit: number = 1000,
+  startDate?: string,
+  endDate?: string
+): Promise<Arrest[]> {
+  let query;
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT 
+        id, arrest_date, arrest_boro, arrest_precinct,
+        offense_description, pd_description,
+        perp_sex, perp_race, age_group,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM arrests
+      WHERE arrest_date >= ${startDate}::date
+        AND arrest_date <= ${endDate}::date
+      ORDER BY arrest_date DESC
+      LIMIT ${limit}
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT 
+        id, arrest_date, arrest_boro, arrest_precinct,
+        offense_description, pd_description,
+        perp_sex, perp_race, age_group,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM arrests
+      WHERE arrest_date = ${startDate}::date
+      ORDER BY arrest_date DESC
+      LIMIT ${limit}
+    `;
+  } else {
+    query = sql`
+      SELECT 
+        id, arrest_date, arrest_boro, arrest_precinct,
+        offense_description, pd_description,
+        perp_sex, perp_race, age_group,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM arrests
+      ORDER BY arrest_date DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  const rows = await query;
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    type: "arrest" as const,
+    coordinates: [parseFloat(row.lng) || 0, parseFloat(row.lat) || 0] as [number, number],
+    properties: {
+      perp_sex: row.perp_sex,
+      age_group: row.age_group,
+      arrest_boro: row.arrest_boro,
+      ofns_desc: row.offense_description,
+      pd_desc: row.pd_description,
+      perp_race: row.perp_race,
+      arrest_date: row.arrest_date?.toISOString?.()?.split("T")[0] || row.arrest_date,
+      arrest_precinct: row.arrest_precinct?.toString(),
+    },
+  }));
+}
+
+export async function getArrestsCount(
+  startDate?: string,
+  endDate?: string
+): Promise<number> {
+  let result;
+
+  if (startDate && endDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM arrests
+      WHERE arrest_date >= ${startDate}::date
+        AND arrest_date <= ${endDate}::date
+    `;
+  } else if (startDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM arrests
+      WHERE arrest_date = ${startDate}::date
+    `;
+  } else {
+    result = await sql`SELECT COUNT(*) as count FROM arrests`;
+  }
+
+  return parseInt(result[0]?.count || "0");
+}
+
+export async function loadShootingData(
+  limit: number = 1000,
+  startDate?: string,
+  endDate?: string
+): Promise<Shooting[]> {
+  let query;
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT 
+        id, occur_date, occur_time, boro, precinct,
+        location_desc, location_class, statistical_murder_flag,
+        perp_sex, perp_age_group, perp_race,
+        vic_sex, vic_age_group, vic_race,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM shootings
+      WHERE occur_date >= ${startDate}::date
+        AND occur_date <= ${endDate}::date
+      ORDER BY occur_date DESC
+      LIMIT ${limit}
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT 
+        id, occur_date, occur_time, boro, precinct,
+        location_desc, location_class, statistical_murder_flag,
+        perp_sex, perp_age_group, perp_race,
+        vic_sex, vic_age_group, vic_race,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM shootings
+      WHERE occur_date = ${startDate}::date
+      ORDER BY occur_date DESC
+      LIMIT ${limit}
+    `;
+  } else {
+    query = sql`
+      SELECT 
+        id, occur_date, occur_time, boro, precinct,
+        location_desc, location_class, statistical_murder_flag,
+        perp_sex, perp_age_group, perp_race,
+        vic_sex, vic_age_group, vic_race,
+        ST_X(location) as lng,
+        ST_Y(location) as lat
+      FROM shootings
+      ORDER BY occur_date DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  const rows = await query;
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    type: "shooting" as const,
+    coordinates: [parseFloat(row.lng) || 0, parseFloat(row.lat) || 0] as [number, number],
+    properties: {
+      perp_sex: row.perp_sex,
+      perp_age_group: row.perp_age_group,
+      perp_race: row.perp_race,
+      vic_sex: row.vic_sex,
+      vic_age_group: row.vic_age_group,
+      vic_race: row.vic_race,
+      boro: row.boro,
+      precinct: row.precinct?.toString(),
+      occur_date: row.occur_date?.toISOString?.()?.split("T")[0] || row.occur_date,
+      occur_time: row.occur_time?.toString() || "",
+      statistical_murder_flag: row.statistical_murder_flag || false,
+      loc_of_occur_desc: row.location_desc,
+      loc_classfctn_desc: row.location_class,
+    },
+  }));
+}
+
+export async function getShootingsCount(
+  startDate?: string,
+  endDate?: string
+): Promise<number> {
+  let result;
+
+  if (startDate && endDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM shootings
+      WHERE occur_date >= ${startDate}::date
+        AND occur_date <= ${endDate}::date
+    `;
+  } else if (startDate) {
+    result = await sql`
+      SELECT COUNT(*) as count FROM shootings
+      WHERE occur_date = ${startDate}::date
+    `;
+  } else {
+    result = await sql`SELECT COUNT(*) as count FROM shootings`;
+  }
+
+  return parseInt(result[0]?.count || "0");
+}
+
+export async function loadMTAData(
+  startDate?: string,
+  endDate?: string
+): Promise<MTARidership[]> {
+  let query;
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT * FROM mta_ridership
+      WHERE date >= ${startDate}::date
+        AND date <= ${endDate}::date
+      ORDER BY date ASC
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT * FROM mta_ridership
+      WHERE date = ${startDate}::date
+      ORDER BY date ASC
+    `;
+  } else {
+    query = sql`
+      SELECT * FROM mta_ridership
+      ORDER BY date DESC
+      LIMIT 30
+    `;
+  }
+
+  const rows = await query;
+
+  return rows.map((row: any) => ({
+    date: formatMTADate(row.date),
+    subways_ridership: parseInt(row.subways_ridership) || 0,
+    subways_percent: parseInt(row.subways_percent) || 0,
+    buses_ridership: parseInt(row.buses_ridership) || 0,
+    buses_percent: parseInt(row.buses_percent) || 0,
+    lirr_ridership: parseInt(row.lirr_ridership) || 0,
+    metro_north_ridership: parseInt(row.metro_north_ridership) || 0,
+    access_a_ride_trips: parseInt(row.access_a_ride_trips) || 0,
+    bridges_tunnels_traffic: parseInt(row.bridges_tunnels_traffic) || 0,
+    staten_island_railway: parseInt(row.staten_island_railway) || 0,
+  }));
+}
+
+function formatMTADate(date: Date | string): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  const year = d.getFullYear();
+  return `${month}/${day}/${year}`;
+}
+
+export async function getArrestsByBorough(
+  startDate?: string,
+  endDate?: string
+): Promise<Record<string, number>> {
+  let query;
+
+  const boroMap: Record<string, string> = {
+    M: "Manhattan",
+    K: "Brooklyn",
+    Q: "Queens",
+    B: "Bronx",
+    S: "Staten Island",
+  };
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT arrest_boro, COUNT(*) as count
+      FROM arrests
+      WHERE arrest_date >= ${startDate}::date
+        AND arrest_date <= ${endDate}::date
+      GROUP BY arrest_boro
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT arrest_boro, COUNT(*) as count
+      FROM arrests
+      WHERE arrest_date = ${startDate}::date
+      GROUP BY arrest_boro
+    `;
+  } else {
+    query = sql`
+      SELECT arrest_boro, COUNT(*) as count
+      FROM arrests
+      GROUP BY arrest_boro
+    `;
+  }
+
+  const rows = await query;
+  const result: Record<string, number> = {};
+
+  for (const row of rows) {
+    const boro = boroMap[row.arrest_boro] || "Unknown";
+    result[boro] = parseInt(row.count) || 0;
+  }
+
+  return result;
+}
+
+export async function getShootingsByBorough(
+  startDate?: string,
+  endDate?: string
+): Promise<Record<string, number>> {
+  let query;
+
+  if (startDate && endDate) {
+    query = sql`
+      SELECT boro, COUNT(*) as count
+      FROM shootings
+      WHERE occur_date >= ${startDate}::date
+        AND occur_date <= ${endDate}::date
+      GROUP BY boro
+    `;
+  } else if (startDate) {
+    query = sql`
+      SELECT boro, COUNT(*) as count
+      FROM shootings
+      WHERE occur_date = ${startDate}::date
+      GROUP BY boro
+    `;
+  } else {
+    query = sql`
+      SELECT boro, COUNT(*) as count
+      FROM shootings
+      GROUP BY boro
+    `;
+  }
+
+  const rows = await query;
+  const result: Record<string, number> = {};
+
+  for (const row of rows) {
+    result[row.boro || "Unknown"] = parseInt(row.count) || 0;
+  }
+
+  return result;
+}
+
+export async function getDateRange(): Promise<{ min: string; max: string }> {
+  const result = await sql`
+    SELECT 
+      LEAST(
+        (SELECT MIN(pickup_datetime::date) FROM taxi_trips),
+        (SELECT MIN(started_at::date) FROM bike_trips),
+        (SELECT MIN(arrest_date) FROM arrests),
+        (SELECT MIN(occur_date) FROM shootings),
+        (SELECT MIN(date) FROM mta_ridership)
+      ) as min_date,
+      GREATEST(
+        (SELECT MAX(pickup_datetime::date) FROM taxi_trips),
+        (SELECT MAX(started_at::date) FROM bike_trips),
+        (SELECT MAX(arrest_date) FROM arrests),
+        (SELECT MAX(occur_date) FROM shootings),
+        (SELECT MAX(date) FROM mta_ridership)
+      ) as max_date
+  `;
+
+  const minDate = result[0]?.min_date;
+  const maxDate = result[0]?.max_date;
+
+  return {
+    min: minDate?.toISOString?.()?.split("T")[0] || "2020-01-01",
+    max: maxDate?.toISOString?.()?.split("T")[0] || new Date().toISOString().split("T")[0],
+  };
+}
+
+// ===========================================
+// Weather API (unchanged - real-time)
+// ===========================================
+
 export interface WeatherData {
   temperature: number;
   humidity: number;
@@ -347,6 +694,33 @@ export interface WeatherData {
   weatherCode: number;
   description: string;
 }
+
+const weatherCodes: Record<number, string> = {
+  0: "Clear sky",
+  1: "Mainly clear",
+  2: "Partly cloudy",
+  3: "Overcast",
+  45: "Foggy",
+  48: "Depositing rime fog",
+  51: "Light drizzle",
+  53: "Moderate drizzle",
+  55: "Dense drizzle",
+  61: "Slight rain",
+  63: "Moderate rain",
+  65: "Heavy rain",
+  71: "Slight snow",
+  73: "Moderate snow",
+  75: "Heavy snow",
+  77: "Snow grains",
+  80: "Slight rain showers",
+  81: "Moderate rain showers",
+  82: "Violent rain showers",
+  85: "Slight snow showers",
+  86: "Heavy snow showers",
+  95: "Thunderstorm",
+  96: "Thunderstorm with slight hail",
+  99: "Thunderstorm with heavy hail",
+};
 
 export async function fetchWeatherData(
   lat = 40.7128,
@@ -357,33 +731,6 @@ export async function fetchWeatherData(
   try {
     const response = await fetch(url);
     const data = await response.json();
-
-    const weatherCodes: Record<number, string> = {
-      0: "Clear sky",
-      1: "Mainly clear",
-      2: "Partly cloudy",
-      3: "Overcast",
-      45: "Foggy",
-      48: "Depositing rime fog",
-      51: "Light drizzle",
-      53: "Moderate drizzle",
-      55: "Dense drizzle",
-      61: "Slight rain",
-      63: "Moderate rain",
-      65: "Heavy rain",
-      71: "Slight snow",
-      73: "Moderate snow",
-      75: "Heavy snow",
-      77: "Snow grains",
-      80: "Slight rain showers",
-      81: "Moderate rain showers",
-      82: "Violent rain showers",
-      85: "Slight snow showers",
-      86: "Heavy snow showers",
-      95: "Thunderstorm",
-      96: "Thunderstorm with slight hail",
-      99: "Thunderstorm with heavy hail",
-    };
 
     return {
       temperature: data.current.temperature_2m,
@@ -406,7 +753,6 @@ export async function fetchWeatherData(
   }
 }
 
-// Historical weather for specific dates
 export async function fetchHistoricalWeather(
   date: string,
   lat = 40.7128,
@@ -437,4 +783,9 @@ export async function fetchHistoricalWeather(
       description: "Unable to fetch weather",
     };
   }
+}
+
+// Close database connection gracefully
+export async function closeDatabase(): Promise<void> {
+  await sql.end();
 }
