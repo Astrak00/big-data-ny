@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYC Urban Data Explorer</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
+    <!-- App Styles -->
+    <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">NYC</div>
+                <div>
+                    <h1>Urban Data Explorer</h1>
+                    <span>Real-time city analytics</span>
+                </div>
+            </div>
+            
+            <div class="date-range-picker">
+                <div class="date-input-group">
+                    <label for="start-date">From</label>
+                    <input type="date" id="start-date">
+                </div>
+                <span class="date-separator">to</span>
+                <div class="date-input-group">
+                    <label for="end-date">To</label>
+                    <input type="date" id="end-date">
+                </div>
+                <button class="btn btn-primary" id="apply-dates">Apply Range</button>
+                <button class="btn btn-secondary" id="clear-dates">Reset</button>
+            </div>
+            
+            <div class="weather-widget">
+                <div class="weather-icon" id="weather-icon">--</div>
+                <div class="weather-info">
+                    <div class="weather-temp" id="weather-temp">--</div>
+                    <div class="weather-desc">
+                        <span id="weather-desc">Loading...</span>
+                        <span id="weather-historical"></span>
+                    </div>
+                    <div class="weather-extra" id="weather-extra">--</div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Data Layers Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Data Layers</span>
+                    <span class="card-badge" id="date-badge">All Data</span>
+                </div>
+                <div class="layer-list">
+                    <label class="layer-toggle active">
+                        <input type="checkbox" id="layer-taxi" checked>
+                        <span class="layer-checkbox"></span>
+                        <span class="layer-color" style="color: var(--accent-yellow);"></span>
+                        <span class="layer-info">
+                            <span class="layer-name">Taxi Trips</span>
+                            <span class="layer-count" id="count-taxi">0</span>
+                        </span>
+                    </label>
+                    <label class="layer-toggle active">
+                        <input type="checkbox" id="layer-bike" checked>
+                        <span class="layer-checkbox"></span>
+                        <span class="layer-color" style="color: var(--accent-green);"></span>
+                        <span class="layer-info">
+                            <span class="layer-name">Bike Trips</span>
+                            <span class="layer-count" id="count-bike">0</span>
+                        </span>
+                    </label>
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="layer-arrests">
+                        <span class="layer-checkbox"></span>
+                        <span class="layer-color" style="color: var(--accent-pink);"></span>
+                        <span class="layer-info">
+                            <span class="layer-name">Arrests</span>
+                            <span class="layer-count" id="count-arrests">0</span>
+                        </span>
+                    </label>
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="layer-shootings">
+                        <span class="layer-checkbox"></span>
+                        <span class="layer-color" style="color: var(--accent-red);"></span>
+                        <span class="layer-info">
+                            <span class="layer-name">Shootings</span>
+                            <span class="layer-count" id="count-shootings">0</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Statistics Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Statistics</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card taxi">
+                        <div class="stat-value" id="stat-taxi">-</div>
+                        <div class="stat-label">Taxi Trips</div>
+                    </div>
+                    <div class="stat-card bike">
+                        <div class="stat-value" id="stat-bike">-</div>
+                        <div class="stat-label">Bike Trips</div>
+                    </div>
+                    <div class="stat-card arrests">
+                        <div class="stat-value" id="stat-arrests">-</div>
+                        <div class="stat-label">Arrests</div>
+                    </div>
+                    <div class="stat-card shootings">
+                        <div class="stat-value" id="stat-shootings">-</div>
+                        <div class="stat-label">Shootings</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- MTA Ridership Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">MTA Ridership</span>
+                </div>
+                <div id="mta-single-day" style="display: none;">
+                    <div class="mta-grid">
+                        <div class="mta-stat">
+                            <div class="mta-value" id="mta-subway">-</div>
+                            <div class="mta-label">Subway</div>
+                        </div>
+                        <div class="mta-stat">
+                            <div class="mta-value" id="mta-bus">-</div>
+                            <div class="mta-label">Bus</div>
+                        </div>
+                        <div class="mta-stat">
+                            <div class="mta-value" id="mta-lirr">-</div>
+                            <div class="mta-label">LIRR</div>
+                        </div>
+                        <div class="mta-stat">
+                            <div class="mta-value" id="mta-metro">-</div>
+                            <div class="mta-label">Metro-North</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="mta-chart-container" class="chart-wrapper">
+                    <canvas id="mta-chart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Borough Chart Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Incidents by Borough</span>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="boro-chart"></canvas>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main">
+            <div id="map"></div>
+            
+            <div class="loading-overlay" id="loading">
+                <div class="loader"></div>
+                <div class="loading-text">Loading NYC data...</div>
+            </div>
+            
+            <div class="map-legend">
+                <div class="legend-title">Legend</div>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <span class="legend-dot" style="color: var(--accent-yellow);"></span>
+                        <span>Taxi Pickup</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="color: var(--accent-green);"></span>
+                        <span>Bike Station</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="color: var(--accent-pink);"></span>
+                        <span>Arrest</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="color: var(--accent-red);"></span>
+                        <span>Shooting</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/public/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+OpenWeatherMap api para obtener datos meteorológicos en tiempo real.
