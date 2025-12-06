@@ -89,6 +89,8 @@ var layers = {
 // Add default layers to map
 layers.taxi.addTo(map);
 layers.bike.addTo(map);
+layers.arrests.addTo(map);
+layers.shootings.addTo(map);
 
 function createClusterGroup(color) {
     return L.markerClusterGroup({
@@ -251,8 +253,8 @@ function renderWeatherOverlay() {
     points.forEach(function(point) {
         if (point.precipitation > 0) {
             var intensity = Math.min(point.precipitation / maxPrecip, 1);
-            var opacity = 0.1 + intensity * 0.5;
-            var radius = 3000 + intensity * 5000; // 3-8 km radius
+            var opacity = 0.15 + intensity * 0.45;
+            var radius = 1500 + intensity * 2000; // 1.5-3.5 km radius (smaller for 8x8 grid)
             
             var circle = L.circle([point.lat, point.lon], {
                 radius: radius,
@@ -462,25 +464,46 @@ function updateMTAChart(mta, isSingleDay) {
                 labels: chartData.map(function(d) {
                     return d.date ? d.date.split('/').slice(0, 2).join('/') : '';
                 }),
-                datasets: [{
-                    label: 'Subway Ridership',
-                    data: chartData.map(function(d) {
-                        return ((d.subways_ridership || 0) / 1000000).toFixed(2);
-                    }),
-                    borderColor: COLORS.blue,
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: COLORS.blue,
-                    pointHoverBackgroundColor: '#fff',
-                    pointBorderColor: '#fff',
-                    pointHoverBorderColor: COLORS.blue,
-                    pointBorderWidth: 1,
-                    pointHoverBorderWidth: 2,
-                    borderWidth: 2
-                }]
+                datasets: [
+                    {
+                        label: 'Subway',
+                        data: chartData.map(function(d) {
+                            return ((d.subways_ridership || 0) / 1000000).toFixed(2);
+                        }),
+                        borderColor: COLORS.blue,
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: COLORS.blue,
+                        pointHoverBackgroundColor: '#fff',
+                        pointBorderColor: '#fff',
+                        pointHoverBorderColor: COLORS.blue,
+                        pointBorderWidth: 1,
+                        pointHoverBorderWidth: 2,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Bus',
+                        data: chartData.map(function(d) {
+                            return ((d.buses_ridership || 0) / 1000000).toFixed(2);
+                        }),
+                        borderColor: COLORS.bike,
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: COLORS.bike,
+                        pointHoverBackgroundColor: '#fff',
+                        pointBorderColor: '#fff',
+                        pointHoverBorderColor: COLORS.bike,
+                        pointBorderWidth: 1,
+                        pointHoverBorderWidth: 2,
+                        borderWidth: 2
+                    }
+                ]
             },
             options: {
                 responsive: true,
@@ -490,7 +513,16 @@ function updateMTAChart(mta, isSingleDay) {
                     intersect: false
                 },
                 plugins: {
-                    legend: { display: false },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#888',
+                            boxWidth: 12,
+                            font: { size: 10 },
+                            padding: 8
+                        }
+                    },
                     tooltip: {
                         enabled: true,
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -500,14 +532,14 @@ function updateMTAChart(mta, isSingleDay) {
                         borderWidth: 1,
                         cornerRadius: 8,
                         padding: 12,
-                        displayColors: false,
+                        displayColors: true,
                         callbacks: {
                             title: function(context) {
                                 return 'Date: ' + context[0].label;
                             },
                             label: function(context) {
                                 var value = context.parsed.y;
-                                return 'Subway: ' + value + 'M riders';
+                                return context.dataset.label + ': ' + value + 'M riders';
                             }
                         }
                     }
@@ -711,6 +743,10 @@ async function initDatePickers() {
         var startPicker = getElement('start-date');
         var endPicker = getElement('end-date');
         
+        // Default date range
+        var defaultStart = '2024-12-10';
+        var defaultEnd = '2024-12-24';
+        
         if (dates.min) {
             startPicker.min = dates.min;
             endPicker.min = dates.min;
@@ -719,11 +755,22 @@ async function initDatePickers() {
         if (dates.max) {
             startPicker.max = dates.max;
             endPicker.max = dates.max;
-            startPicker.value = dates.max;
-            endPicker.value = dates.max;
         }
+        
+        // Set default values
+        startPicker.value = defaultStart;
+        endPicker.value = defaultEnd;
+        
+        // Update state
+        state.startDate = defaultStart;
+        state.endDate = defaultEnd;
+        
+        // Load data with default range
+        loadData(defaultStart, defaultEnd);
     } catch (e) {
         console.error('Error initializing dates:', e);
+        // Fallback: load all data
+        loadData();
     }
 }
 
@@ -845,8 +892,7 @@ function setupLayerToggle(checkboxId, layer) {
 function init() {
     loadSavedTheme();
     setupEventListeners();
-    initDatePickers();
-    loadData();
+    initDatePickers(); // This now loads data with default date range
 }
 
 // Start the application

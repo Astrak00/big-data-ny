@@ -849,9 +849,10 @@ export async function fetchWeatherGrid(
     west: -74.26,
   };
 
-  // Grid resolution: 5x5 grid points
-  const latStep = (bounds.north - bounds.south) / 4;
-  const lonStep = (bounds.east - bounds.west) / 4;
+  // Grid resolution: 8x8 grid points for finer detail
+  const gridSize = 8;
+  const latStep = (bounds.north - bounds.south) / (gridSize - 1);
+  const lonStep = (bounds.east - bounds.west) / (gridSize - 1);
 
   const points: WeatherGridPoint[] = [];
   const today = new Date().toISOString().split("T")[0];
@@ -861,8 +862,8 @@ export async function fetchWeatherGrid(
   const lats: number[] = [];
   const lons: number[] = [];
 
-  for (let i = 0; i < 5; i++) {
-    for (let j = 0; j < 5; j++) {
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
       const lat = bounds.south + i * latStep;
       const lon = bounds.west + j * lonStep;
       lats.push(lat);
