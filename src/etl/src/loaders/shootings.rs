@@ -32,7 +32,7 @@ struct ShootingProperties {
     precinct: Option<String>,
     loc_of_occur_desc: Option<String>,
     loc_classfctn_desc: Option<String>,
-    statistical_murder_flag: Option<String>,
+    statistical_murder_flag: Option<bool>,
     perp_sex: Option<String>,
     perp_age_group: Option<String>,
     perp_race: Option<String>,
@@ -100,8 +100,7 @@ pub async fn load(pool: &Pool, source: &str, limit: usize) -> Result<()> {
         let precinct = feature.properties.precinct.as_ref()
             .and_then(|s| s.parse::<i32>().ok());
         
-        let murder_flag = feature.properties.statistical_murder_flag.as_ref()
-            .map(|s| s.to_lowercase() == "true" || s == "Y" || s == "1");
+        let murder_flag = feature.properties.statistical_murder_flag;
         
         let perp_sex = feature.properties.perp_sex.as_ref()
             .and_then(|s| s.chars().next())

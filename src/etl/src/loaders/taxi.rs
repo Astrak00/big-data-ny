@@ -98,6 +98,8 @@ pub async fn load(pool: &Pool, source: &str, limit: usize) -> Result<()> {
             });
             
             if let Some(pickup) = pickup_dt {
+                // Use LEFT JOIN with COALESCE to handle missing zones
+                // Falls back to zone 264 (Unknown) if zone doesn't exist
                 client.execute(
                     r#"
                     INSERT INTO taxi_trips (
@@ -107,10 +109,14 @@ pub async fn load(pool: &Pool, source: &str, limit: usize) -> Result<()> {
                     )
                     SELECT 
                         $1, $2, $3, $4, $5, $6, $7,
-                        pu.centroid, do.centroid, $8, $9
+                        COALESCE(pu.centroid, fallback.centroid),
+                        COALESCE(do_zone.centroid, fallback.centroid),
+                        $8, $9
                     FROM 
-                        (SELECT centroid FROM taxi_zones WHERE location_id = COALESCE($6, 264)) pu,
-                        (SELECT centroid FROM taxi_zones WHERE location_id = COALESCE($7, 264)) do
+                        taxi_zones fallback
+                        LEFT JOIN taxi_zones pu ON pu.location_id = $6
+                        LEFT JOIN taxi_zones do_zone ON do_zone.location_id = $7
+                    WHERE fallback.location_id = 264
                     "#,
                     &[
                         &vendor_id, &pickup, &dropoff_dt, &passengers,

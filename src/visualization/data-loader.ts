@@ -655,31 +655,52 @@ export async function getShootingsByBorough(
 }
 
 export async function getDateRange(): Promise<{ min: string; max: string }> {
-  const result = await sql`
-    SELECT 
-      LEAST(
-        (SELECT MIN(pickup_datetime::date) FROM taxi_trips),
-        (SELECT MIN(started_at::date) FROM bike_trips),
-        (SELECT MIN(arrest_date) FROM arrests),
-        (SELECT MIN(occur_date) FROM shootings),
-        (SELECT MIN(date) FROM mta_ridership)
-      ) as min_date,
-      GREATEST(
-        (SELECT MAX(pickup_datetime::date) FROM taxi_trips),
-        (SELECT MAX(started_at::date) FROM bike_trips),
-        (SELECT MAX(arrest_date) FROM arrests),
-        (SELECT MAX(occur_date) FROM shootings),
-        (SELECT MAX(date) FROM mta_ridership)
-      ) as max_date
-  `;
+  try {
+    // Get min/max dates from each table separately to handle empty tables
+    const result = await sql`
+      SELECT 
+        (
+          SELECT MIN(d) FROM (
+            SELECT MIN(pickup_datetime::date) as d FROM taxi_trips WHERE pickup_datetime IS NOT NULL
+            UNION ALL
+            SELECT MIN(started_at::date) FROM bike_trips WHERE started_at IS NOT NULL
+            UNION ALL
+            SELECT MIN(arrest_date) FROM arrests WHERE arrest_date IS NOT NULL
+            UNION ALL
+            SELECT MIN(occur_date) FROM shootings WHERE occur_date IS NOT NULL
+            UNION ALL
+            SELECT MIN(date) FROM mta_ridership WHERE date IS NOT NULL
+          ) dates WHERE d IS NOT NULL
+        ) as min_date,
+        (
+          SELECT MAX(d) FROM (
+            SELECT MAX(pickup_datetime::date) as d FROM taxi_trips WHERE pickup_datetime IS NOT NULL
+            UNION ALL
+            SELECT MAX(started_at::date) FROM bike_trips WHERE started_at IS NOT NULL
+            UNION ALL
+            SELECT MAX(arrest_date) FROM arrests WHERE arrest_date IS NOT NULL
+            UNION ALL
+            SELECT MAX(occur_date) FROM shootings WHERE occur_date IS NOT NULL
+            UNION ALL
+            SELECT MAX(date) FROM mta_ridership WHERE date IS NOT NULL
+          ) dates WHERE d IS NOT NULL
+        ) as max_date
+    `;
 
-  const minDate = result[0]?.min_date;
-  const maxDate = result[0]?.max_date;
+    const minDate = result[0]?.min_date;
+    const maxDate = result[0]?.max_date;
 
-  return {
-    min: minDate?.toISOString?.()?.split("T")[0] || "2020-01-01",
-    max: maxDate?.toISOString?.()?.split("T")[0] || new Date().toISOString().split("T")[0],
-  };
+    return {
+      min: minDate?.toISOString?.()?.split("T")[0] || "2020-01-01",
+      max: maxDate?.toISOString?.()?.split("T")[0] || new Date().toISOString().split("T")[0],
+    };
+  } catch (error) {
+    console.error("Error getting date range:", error);
+    return {
+      min: "2020-01-01",
+      max: new Date().toISOString().split("T")[0],
+    };
+  }
 }
 
 // ===========================================
