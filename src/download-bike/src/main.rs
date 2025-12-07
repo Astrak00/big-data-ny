@@ -109,7 +109,7 @@ async fn main() {
 
     let mut urls = Vec::new();
     for year in args.start_year..=args.end_year {
-        for month in 1u8..=12u8 {
+        for month in 11u8..=12u8 {
             let (url, filename) = make_url(year, month);
             urls.push((url, filename));
         }

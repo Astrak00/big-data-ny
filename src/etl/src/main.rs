@@ -137,40 +137,43 @@ async fn run_all_pipelines(pool: &deadpool_postgres::Pool, data_dir: &str) -> Re
     use std::path::Path;
     
     let data_path = Path::new(data_dir);
+    let limit = 500000; // Example limit for testing
     
     // Load taxi data
     let taxi_file = data_path.join("yellow_tripdata_2024-12.parquet");
     if taxi_file.exists() {
         info!("Loading taxi data...");
-        loaders::taxi::load(pool, taxi_file.to_str().unwrap(), 0, false).await?;
+        loaders::taxi::load(pool, taxi_file.to_str().unwrap(), limit, true).await?;
     }
     
     // Load bike data
-    let bike_file = data_path.join("JC-202412-citibike-tripdata.csv");
-    if bike_file.exists() {
-        info!("Loading bike data...");
-        loaders::bike::load(pool, bike_file.to_str().unwrap(), 0, false).await?;
+    for i in 1..=3 {
+        let bike_file = data_path.join(format!("202412-citibike-tripdata_{}.csv", i));
+        if bike_file.exists() {
+            info!("Loading bike data from file {}...", bike_file.display());
+            loaders::bike::load(pool, bike_file.to_str().unwrap(), limit, false).await?;
+        }
     }
     
     // Load arrests data
     let arrests_file = data_path.join("NYPD_Arrests_Data_1000.geojson");
     if arrests_file.exists() {
         info!("Loading arrests data...");
-        loaders::arrests::load(pool, arrests_file.to_str().unwrap(), 0).await?;
+        loaders::arrests::load(pool, arrests_file.to_str().unwrap(), limit).await?;
     }
     
     // Load shootings data
     let shootings_file = data_path.join("NYPD_Shooting_Incident_Data_1000.geojson");
     if shootings_file.exists() {
         info!("Loading shootings data...");
-        loaders::shootings::load(pool, shootings_file.to_str().unwrap(), 0).await?;
+        loaders::shootings::load(pool, shootings_file.to_str().unwrap(), limit).await?;
     }
     
     // Load MTA data
     let mta_file = data_path.join("MTA_Daily_Ridership_Data__2020_-_2025_20251206.csv");
     if mta_file.exists() {
         info!("Loading MTA data...");
-        loaders::mta::load(pool, mta_file.to_str().unwrap(), 0).await?;
+        loaders::mta::load(pool, mta_file.to_str().unwrap(), limit).await?;
     }
     
     Ok(())

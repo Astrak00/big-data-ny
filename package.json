@@ -8,7 +8,8 @@
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
     "etl:build": "cd src/etl && cargo build --release",
-    "etl:all": "cd src/etl && cargo run --release -- all --data-dir ../../data_trunc",
+    "etl:all_from_file": "cd src/etl && ./load_exc_taxi.sh",
+    "etl:all_data": "cd src/etl && cargo run --release -- all --data-dir ../../data_trunc",
     "etl:download": "cd src/etl && cargo run --release -- download --output-dir ../../data"
   },
   "dependencies": {
