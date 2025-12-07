@@ -1193,6 +1193,10 @@ function displayRouteResults(routeData) {
     resultsDiv.style.display = 'block';
     optionsList.innerHTML = '';
     
+    // Show route legend on map
+    var routeLegend = getElement('route-legend');
+    if (routeLegend) routeLegend.style.display = 'block';
+    
     var recommendation = routeData.recommendation;
     
     // Store the three best routes for display
@@ -1561,6 +1565,10 @@ function clearRoute() {
     // Hide results
     var resultsDiv = getElement('route-results');
     if (resultsDiv) resultsDiv.style.display = 'none';
+    
+    // Hide route legend
+    var routeLegend = getElement('route-legend');
+    if (routeLegend) routeLegend.style.display = 'none';
     
     stopPickingMode();
 }
