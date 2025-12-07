@@ -576,15 +576,6 @@ body {
     z-index: 1;
 }
 
-/* Dark map tiles */
-.leaflet-tile-pane {
-    filter: saturate(0.8);
-}
-
-[data-theme="dark"] .leaflet-tile-pane {
-    filter: invert(1) hue-rotate(180deg) saturate(0.8) brightness(0.9);
-}
-
 /* ===========================================
    Map Controls & Legend
    =========================================== */
