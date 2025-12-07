@@ -1,5 +1,8 @@
 #import "uc3mreport.typ": conf
 
+#import "diagrams.typ": etl-pipeline, poc-architecture, system-architecture
+
+
 #show: conf.with(
   degree: "Master en Ingeniería Informática",
   subject: "Datos Masivos y Encadenados",
@@ -17,7 +20,48 @@
   language: "es",
   appendixes: include "appendix.typ",
   summary: [
-    .
+    Este proyecto desarrolla un sistema de datos integrado para analizar los
+    patrones de movilidad y la seguridad pública en la ciudad de Nueva York,
+    combinando información histórica y en tiempo real procedente de múltiples
+    fuentes relacionadas con el transporte y la delincuencia. El objetivo es
+    identificar correlaciones entre la movilidad, los acontecimientos urbanos,
+    el clima y la violencia, y apoyar la toma de decisiones informadas en
+    materia de planificación urbana y recomendaciones de rutas más seguras y
+    eficientes.
+
+    El sistema integra una amplia gama de conjuntos de datos, que incluyen
+    viajes en taxi, uso de Citi Bike, número de pasajeros de la MTA, incidentes
+    delictivos históricos, condiciones meteorológicas, señales de eventos en las
+    redes sociales e información sobre el tráfico. Los datos históricos
+    (2020-2025) se gestionan a través de una arquitectura materializada basada
+    en Apache Cassandra, Apache Spark, Parquet y Kafka para soportar cargas de
+    trabajo analíticas y de almacenamiento escalables. Las entradas en tiempo
+    real, como las actualizaciones meteorológicas, las condiciones del tráfico y
+    la actividad en las redes sociales, se incorporan a través de una capa de
+    integración virtual que utiliza API (OpenWeatherMap, Google Maps,
+    Twitter/Bluesky/Mastodon).
+
+    Una canalización ETL basada en Rust se encarga de la extracción,
+    normalización y carga de conjuntos de datos heterogéneos, mientras que
+    Python da soporte a las tareas analíticas y la visualización. La interfaz
+    del sistema ofrece visualizaciones geoespaciales interactivas a través de
+    Leaflet, con el apoyo adicional de Tableau/ArcGIS para usuarios sin
+    conocimientos técnicos.
+
+    Una prueba de concepto, que utiliza datos de diciembre de 2024, valida la
+    arquitectura. Demuestra la capacidad de ingestar conjuntos de datos
+    multimodales, procesarlos utilizando PostgreSQL + PostGIS y mostrar las
+    correlaciones entre movilidad y seguridad en una interfaz web interactiva.
+    El enriquecimiento meteorológico en tiempo real (Open-Meteo) confirma la
+    capacidad de la plataforma para integrar variables dinámicas.
+
+    El proyecto concluye que la arquitectura híbrida es flexible, escalable y
+    eficaz para el análisis de la movilidad y la seguridad. Si bien algunas
+    funcionalidades avanzadas, como la integración completa de las redes
+    sociales en tiempo real y un motor de navegación inteligente, siguen siendo
+    tareas pendientes, la implementación actual establece una base sólida para
+    una mayor expansión y para apoyar estrategias de planificación urbana
+    basadas en datos.
 
     #v(1fr)
 
@@ -179,6 +223,9 @@ librería `Leaflet` para la visualización de datos geoespaciales, que nos ha
 permitido crear mapas interactivos y detallados de Nueva York, mostrando la
 distribución de los transportes y los incidentes de violencia en la ciudad.
 
+#etl-pipeline
+<fig:etl-pipeline>
+
 == Arquitectura del sistema
 Para nuestro proyecto, hemos optado por una arquitectura híbrida, que combina de
 una arquitectura materializada y una arquitectura virtual. Esta elección se basa
@@ -234,10 +281,14 @@ inmediatez y actualidad.
 A continuación, se presenta un diagrama que ilustra la arquitectura del sistema
 propuesto para la integración de datos históricos y en tiempo real:
 
+#system-architecture
+<fig:arquitecture-full-system>
+
 #figure(
   image("diagrama_datos.pdf", width: 100%),
   caption: "Arquitectura del sistema para datos históricos y en tiempo real",
 )
+
 == Consultas básicas
 Para ilustrar el funcionamiento del sistema de integración de datos, a
 continuación se presentan algunas consultas básicas que se pueden realizar sobre
@@ -288,21 +339,86 @@ para la recopilación y procesamiento eficiente de grandes volúmenes de datos.
 
 Para la realización de la prueba de concepto, hemos utilizado un segmento de los
 datos, para comprobar la viabilidad de las técnicas de visualización y análisis
-propuestas. Hemos seleccionado datos de taxis amarillos, así como datos de
-incidentes de violencia en la ciudad, para un período de 1 meses, concretamente
-diciembre de 2024. Este período nos permite observar patrones y tendencias en el
-uso del transporte y su posible relación con la violencia en la ciudad en un mes
-muy activo, ya que se celebran las navidades, atrayendo a muchos turistas y
-transportes adicionales. COn respecto a los datos de redes sociales, no hemos
-podido tener acceso a suficiente volumen de datos para este período, por lo que
-no se han incluido en la prueba de concepto. #footnote(
+propuestas. Hemos seleccionado datos de taxis amarillos, uso de transporte
+público, uso de bicicletas de alquiler así como datos de incidentes de violencia
+en la ciudad, para un período de 1 mese, concretamente diciembre de 2024. Este
+período nos permite observar patrones y tendencias en el uso del transporte y su
+posible relación con la violencia en la ciudad en un mes muy activo, ya que se
+celebran las navidades, atrayendo a muchos turistas y transportes adicionales.
+Con respecto a los datos de redes sociales, no hemos podido tener acceso a
+suficiente volumen de datos para este período, por lo que no se han incluido en
+la prueba de concepto.
+#footnote(
   ["Ver el @apx:real-time-social-media-integration para más detalles sobre la
     integración de datos en tiempo real."],
 )
 
+== Implementación Técnica de la POC
+
+Para validar la arquitectura propuesta, se ha desarrollado una implementación
+funcional completa que abarca desde la ingesta de datos hasta su visualización
+en una interfaz web.
+
+=== Pipeline ETL (Extract, Transform, Load)
+Se ha implementado un pipeline de datos robusto utilizando el lenguaje de
+programación `Rust`, elegido por su eficiencia y seguridad de memoria. Este
+sistema es capaz de:
+- *Extraer*: Descargar y leer datos de múltiples fuentes y formatos, incluyendo
+  archivos Parquet (viajes de taxi), CSV (bicicletas y transporte público) y
+  GeoJSON (incidentes de seguridad).
+- *Transformar*: Normalizar los datos, gestionar tipos de datos geoespaciales y
+  filtrar registros inválidos.
+- *Cargar*: Insertar los datos procesados en una base de datos relacional
+  optimizada.
+
+=== Almacenamiento de Datos
+Como repositorio central para la POC, se ha desplegado una base de datos
+`PostgreSQL` equipada con la extensión `PostGIS`. Esto permite realizar
+consultas espaciales avanzadas, fundamentales para relacionar ubicaciones de
+transporte con zonas de incidentes. El esquema de base de datos incluye tablas
+específicas para:
+- `taxi_trips`: Viajes de taxi con puntos de recogida y destino.
+- `bike_trips`: Viajes de Citi Bike con información de estaciones.
+- `arrests` y `shootings`: Datos de seguridad geolocalizados.
+- `mta_ridership`: Datos agregados de uso de transporte público.
+
+=== Visualización y API
+La capa de presentación se ha construido sobre una arquitectura moderna y
+ligera:
+- *Backend*: Un servidor web desarrollado con `Bun` y el framework `Hono`, que
+  expone una API REST para servir los datos procesados al frontend de manera
+  eficiente.
+- *Frontend*: Una interfaz interactiva basada en `Leaflet`, que permite
+  visualizar los datos sobre un mapa de la ciudad, facilitando la exploración de
+  patrones espaciales.
+- *Integración en Tiempo Real*: Se ha integrado la API de `Open-Meteo` para
+  enriquecer la visualización con datos meteorológicos actuales e históricos,
+  permitiendo correlacionar el clima con los patrones de movilidad.
+
+#poc-architecture
+<fig:poc-architecture>
 
 
 = Conclusiones
+
+En este proyecto, hemos desarrollado una arquitectura híbrida para la
+integración y visualización de datos históricos y en tiempo real relacionados
+con los transportes públicos y privados en Nueva York, así como su posible
+relación con la violencia en la ciudad. La combinación de una arquitectura
+materializada para el almacenamiento y procesamiento de datos históricos, junto
+con una arquitectura virtual para la integración de datos en tiempo real, nos ha
+permitido crear un sistema flexible y escalable que puede adaptarse a futuras
+necesidades y la incorporación de nuevas fuentes de datos.
+
+Queremos recalcar que dadas las limitaciones de recursos, no hemos podido
+implementar todas las funcionalidades propuestas inicialmente, como la
+integración completa de datos en tiempo real o la implementación de un sistema
+de navegación avanzado basado en resultados de análisis de redes sociales. Sin
+embargo, la prueba de concepto desarrollada demuestra la viabilidad de la
+arquitectura propuesta y sienta las bases para futuras mejoras y expansiones del
+sistema.
+
+
 
 #pagebreak()
 
