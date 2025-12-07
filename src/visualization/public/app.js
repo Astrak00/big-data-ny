@@ -755,6 +755,8 @@ function updateStats(taxi, bike, arrests, shootings) {
 
 function updateDateBadge(startDate, endDate) {
     var badge = getElement('date-badge');
+    if (!badge) return; // Badge may not exist in new design
+    
     if (startDate && endDate) {
         badge.textContent = startDate + ' to ' + endDate;
     } else if (startDate) {
@@ -816,12 +818,6 @@ function toggleTheme() {
     // Update HTML attribute
     document.documentElement.setAttribute('data-theme', newTheme);
     
-    // Update theme toggle icon
-    var themeIcon = document.querySelector('.theme-icon');
-    if (themeIcon) {
-        themeIcon.innerHTML = newTheme === 'dark' ? '&#9728;' : '&#9790;'; // Sun / Moon
-    }
-    
     // Switch map tiles
     map.removeLayer(currentTileLayer);
     currentTileLayer = L.tileLayer(TILE_URLS[newTheme], {
@@ -863,15 +859,6 @@ function setupEventListeners() {
         }
     });
     
-    // Clear date range
-    getElement('clear-dates').addEventListener('click', function() {
-        state.startDate = null;
-        state.endDate = null;
-        getElement('start-date').value = '';
-        getElement('end-date').value = '';
-        loadData();
-    });
-    
     // Theme toggle
     var themeBtn = getElement('theme-toggle');
     if (themeBtn) {
@@ -887,19 +874,19 @@ function setupEventListeners() {
     // Weather layer toggle (special handling)
     var weatherCheckbox = getElement('layer-weather');
     if (weatherCheckbox) {
-        var weatherToggle = weatherCheckbox.closest('.layer-toggle');
+        var weatherToggle = weatherCheckbox.closest('.layer-chip') || weatherCheckbox.closest('.layer-toggle');
         weatherCheckbox.addEventListener('change', function() {
             weatherOverlayVisible = weatherCheckbox.checked;
             if (weatherCheckbox.checked) {
                 map.addLayer(layers.weather);
-                weatherToggle.classList.add('active');
+                if (weatherToggle) weatherToggle.classList.add('active');
                 // Load weather grid on demand when user enables the layer
                 loadWeatherGrid(state.startDate).then(function() {
                     renderWeatherOverlay();
                 });
             } else {
                 map.removeLayer(layers.weather);
-                weatherToggle.classList.remove('active');
+                if (weatherToggle) weatherToggle.classList.remove('active');
                 hideWeatherOverlay();
             }
         });
@@ -908,15 +895,15 @@ function setupEventListeners() {
 
 function setupLayerToggle(checkboxId, layer) {
     var checkbox = getElement(checkboxId);
-    var toggle = checkbox.closest('.layer-toggle');
+    var toggle = checkbox.closest('.layer-chip') || checkbox.closest('.layer-toggle');
     
     checkbox.addEventListener('change', function() {
         if (checkbox.checked) {
             map.addLayer(layer);
-            toggle.classList.add('active');
+            if (toggle) toggle.classList.add('active');
         } else {
             map.removeLayer(layer);
-            toggle.classList.remove('active');
+            if (toggle) toggle.classList.remove('active');
         }
     });
 }
@@ -943,16 +930,6 @@ var ROUTE_ICONS = {
  * Set up route planner event listeners
  */
 function setupRoutePlanner() {
-    // Toggle collapse/expand
-    var toggleBtn = getElement('toggle-route-planner');
-    var content = getElement('route-planner-content');
-    if (toggleBtn && content) {
-        toggleBtn.addEventListener('click', function() {
-            content.classList.toggle('collapsed');
-            toggleBtn.textContent = content.classList.contains('collapsed') ? '+' : '-';
-        });
-    }
-    
     // Pick origin button
     var pickOriginBtn = getElement('pick-origin');
     if (pickOriginBtn) {
@@ -1001,8 +978,8 @@ function setupRoutePlanner() {
         destLng.addEventListener('change', updateDestFromInputs);
     }
     
-    // Optimize buttons
-    var optimizeBtns = document.querySelectorAll('.btn-optimize');
+    // Optimize buttons (support both old and new class names)
+    var optimizeBtns = document.querySelectorAll('.btn-optimize, .toggle-btn[data-optimize]');
     optimizeBtns.forEach(function(btn) {
         btn.addEventListener('click', function() {
             optimizeBtns.forEach(function(b) { b.classList.remove('active'); });
@@ -1055,10 +1032,11 @@ function startPickingMode(type) {
     
     // Show picking indicator
     var indicator = document.createElement('div');
-    indicator.className = 'picking-indicator';
+    indicator.className = 'pick-indicator';
     indicator.id = 'picking-indicator';
     indicator.textContent = 'Click on the map to set ' + type;
-    document.querySelector('.main').appendChild(indicator);
+    var mapContainer = document.querySelector('.map-container') || document.querySelector('.main');
+    if (mapContainer) mapContainer.appendChild(indicator);
 }
 
 /**

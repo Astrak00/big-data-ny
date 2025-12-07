@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NYC Urban Data Explorer</title>
+    <title>NYC Urban Analytics | Proof of Concept</title>
     
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -18,281 +18,332 @@
 </head>
 <body>
     <div class="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <div class="logo-icon">NYC</div>
-                <div>
-                    <h1>Urban Data Explorer</h1>
-                    <span>Real-time city analytics</span>
+        <!-- Top Navigation Bar -->
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 21h18M3 7v1a3 3 0 003 3h12a3 3 0 003-3V7M6 21V11M18 21V11M12 21V11M3 7l9-4 9 4"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-name">NYC Urban Analytics</span>
+                    <span class="brand-tag">Proof of Concept</span>
                 </div>
             </div>
             
-            <div class="date-range-picker">
-                <div class="date-input-group">
-                    <label for="start-date">From</label>
-                    <input type="date" id="start-date">
-                </div>
-                <span class="date-separator">to</span>
-                <div class="date-input-group">
-                    <label for="end-date">To</label>
-                    <input type="date" id="end-date">
-                </div>
-                <button class="btn btn-primary" id="apply-dates">Apply Range</button>
-                <button class="btn btn-secondary" id="clear-dates">Reset</button>
-            </div>
-            
-            <div class="weather-widget">
-                <div class="weather-icon" id="weather-icon">--</div>
-                <div class="weather-info">
-                    <div class="weather-temp" id="weather-temp">--</div>
-                    <div class="weather-desc">
-                        <span id="weather-desc">Loading...</span>
-                        <span id="weather-historical"></span>
+            <div class="navbar-center">
+                <div class="date-picker">
+                    <div class="date-field">
+                        <label>From</label>
+                        <input type="date" id="start-date">
                     </div>
-                    <div class="weather-extra" id="weather-extra">--</div>
+                    <span class="date-arrow">→</span>
+                    <div class="date-field">
+                        <label>To</label>
+                        <input type="date" id="end-date">
+                    </div>
+                    <button class="btn-primary" id="apply-dates">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Apply
+                    </button>
                 </div>
             </div>
             
-            <button class="btn btn-secondary theme-toggle" id="theme-toggle" title="Toggle Light/Dark Mode">
-                <span class="theme-icon">&#9728;</span>
-            </button>
-        </header>
-        
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <!-- Route Planner Card -->
-            <div class="card route-planner-card">
-                <div class="card-header">
-                    <span class="card-title">Route Planner</span>
-                    <button class="btn btn-small" id="toggle-route-planner" title="Collapse/Expand">-</button>
+            <div class="navbar-end">
+                <div class="weather-chip" id="weather-chip">
+                    <span class="weather-icon" id="weather-icon">--</span>
+                    <span class="weather-temp" id="weather-temp">--</span>
                 </div>
-                <div class="route-planner-content" id="route-planner-content">
-                    <div class="route-input-group">
-                        <label>Origin</label>
-                        <div class="route-input-row">
-                            <input type="text" id="origin-input" placeholder="Click map or enter coords" readonly>
-                            <button class="btn btn-small btn-icon" id="pick-origin" title="Pick on map">O</button>
+                <button class="icon-btn" id="theme-toggle" title="Toggle theme">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Layout -->
+        <div class="layout">
+            <!-- Left Panel -->
+            <aside class="panel panel-left">
+                <!-- Quick Stats -->
+                <section class="panel-section">
+                    <h3 class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <path d="M18 20V10M12 20V4M6 20v-6"/>
+                        </svg>
+                        Live Statistics
+                    </h3>
+                    <div class="stats-row">
+                        <div class="stat-chip stat-taxi">
+                            <span class="stat-value" id="stat-taxi">--</span>
+                            <span class="stat-label">Taxi</span>
                         </div>
-                        <div class="route-coords">
-                            <input type="number" id="origin-lat" placeholder="Lat" step="0.001">
-                            <input type="number" id="origin-lng" placeholder="Lng" step="0.001">
+                        <div class="stat-chip stat-bike">
+                            <span class="stat-value" id="stat-bike">--</span>
+                            <span class="stat-label">Bike</span>
+                        </div>
+                        <div class="stat-chip stat-arrests">
+                            <span class="stat-value" id="stat-arrests">--</span>
+                            <span class="stat-label">Arrests</span>
+                        </div>
+                        <div class="stat-chip stat-shootings">
+                            <span class="stat-value" id="stat-shootings">--</span>
+                            <span class="stat-label">Shootings</span>
                         </div>
                     </div>
-                    <div class="route-input-group">
-                        <label>Destination</label>
-                        <div class="route-input-row">
-                            <input type="text" id="dest-input" placeholder="Click map or enter coords" readonly>
-                            <button class="btn btn-small btn-icon" id="pick-dest" title="Pick on map">D</button>
+                </section>
+
+                <!-- Data Layers -->
+                <section class="panel-section">
+                    <h3 class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+                        </svg>
+                        Map Layers
+                    </h3>
+                    <div class="layer-grid">
+                        <label class="layer-chip active" data-layer="taxi">
+                            <input type="checkbox" id="layer-taxi" checked>
+                            <span class="chip-dot taxi"></span>
+                            <span class="chip-label">Taxi</span>
+                            <span class="chip-count" id="count-taxi">0</span>
+                        </label>
+                        <label class="layer-chip active" data-layer="bike">
+                            <input type="checkbox" id="layer-bike" checked>
+                            <span class="chip-dot bike"></span>
+                            <span class="chip-label">Bike</span>
+                            <span class="chip-count" id="count-bike">0</span>
+                        </label>
+                        <label class="layer-chip active" data-layer="arrests">
+                            <input type="checkbox" id="layer-arrests" checked>
+                            <span class="chip-dot arrests"></span>
+                            <span class="chip-label">Arrests</span>
+                            <span class="chip-count" id="count-arrests">0</span>
+                        </label>
+                        <label class="layer-chip active" data-layer="shootings">
+                            <input type="checkbox" id="layer-shootings" checked>
+                            <span class="chip-dot shootings"></span>
+                            <span class="chip-label">Shootings</span>
+                            <span class="chip-count" id="count-shootings">0</span>
+                        </label>
+                        <label class="layer-chip" data-layer="weather">
+                            <input type="checkbox" id="layer-weather">
+                            <span class="chip-dot weather"></span>
+                            <span class="chip-label">Weather</span>
+                            <span class="chip-count" id="count-weather">--</span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- MTA Ridership -->
+                <section class="panel-section">
+                    <h3 class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 17h6M12 3v5"/>
+                        </svg>
+                        MTA Ridership
+                    </h3>
+                    <div id="mta-single-day" class="mta-stats" style="display: none;">
+                        <div class="mta-stat">
+                            <span class="mta-icon">🚇</span>
+                            <span class="mta-value" id="mta-subway">--</span>
+                            <span class="mta-label">Subway</span>
                         </div>
-                        <div class="route-coords">
-                            <input type="number" id="dest-lat" placeholder="Lat" step="0.001">
-                            <input type="number" id="dest-lng" placeholder="Lng" step="0.001">
+                        <div class="mta-stat">
+                            <span class="mta-icon">🚌</span>
+                            <span class="mta-value" id="mta-bus">--</span>
+                            <span class="mta-label">Bus</span>
+                        </div>
+                        <div class="mta-stat">
+                            <span class="mta-icon">🚂</span>
+                            <span class="mta-value" id="mta-lirr">--</span>
+                            <span class="mta-label">LIRR</span>
+                        </div>
+                        <div class="mta-stat">
+                            <span class="mta-icon">🚃</span>
+                            <span class="mta-value" id="mta-metro">--</span>
+                            <span class="mta-label">Metro-North</span>
                         </div>
                     </div>
-                    <div class="route-options">
-                        <label>Optimize for:</label>
-                        <div class="route-optimize-btns">
-                            <button class="btn btn-optimize active" id="opt-fastest" data-optimize="fastest">Fastest</button>
-                            <button class="btn btn-optimize" id="opt-cheapest" data-optimize="cheapest">Cheapest</button>
-                            <button class="btn btn-optimize" id="opt-safest" data-optimize="safest">Safest</button>
+                    <div id="mta-chart-container" class="chart-container">
+                        <canvas id="mta-chart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Borough Incidents -->
+                <section class="panel-section">
+                    <h3 class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        Incidents by Borough
+                    </h3>
+                    <div class="chart-container">
+                        <canvas id="boro-chart"></canvas>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Map Container -->
+            <main class="map-container">
+                <div id="map"></div>
+                
+                <!-- Loading Overlay -->
+                <div class="loading-overlay" id="loading">
+                    <div class="loading-spinner"></div>
+                    <p class="loading-text">Loading NYC urban data...</p>
+                </div>
+
+                <!-- Map Controls -->
+                <div class="map-controls">
+                    <div class="map-legend" id="map-legend">
+                        <div class="legend-header">Legend</div>
+                        <div class="legend-item"><span class="legend-dot taxi"></span>Taxi Pickup</div>
+                        <div class="legend-item"><span class="legend-dot bike"></span>Bike Station</div>
+                        <div class="legend-item"><span class="legend-dot arrests"></span>Arrest</div>
+                        <div class="legend-item"><span class="legend-dot shootings"></span>Shooting</div>
+                        <div class="legend-item" id="legend-precip" style="display:none;">
+                            <span class="legend-gradient"></span>Precipitation
                         </div>
                     </div>
-                    <div class="route-actions">
-                        <button class="btn btn-primary" id="plan-route">Plan Route</button>
-                        <button class="btn btn-secondary" id="clear-route">Clear</button>
-                    </div>
+                </div>
+
+                <!-- Route Legend -->
+                <div class="route-legend" id="route-legend" style="display: none;">
+                    <div class="legend-header">Routes</div>
+                    <div class="legend-item"><span class="route-line fastest"></span>Fastest</div>
+                    <div class="legend-item"><span class="route-line cheapest"></span>Cheapest</div>
+                    <div class="legend-item"><span class="route-line safest"></span>Safest</div>
+                </div>
+            </main>
+
+            <!-- Right Panel - Route Planner -->
+            <aside class="panel panel-right">
+                <section class="panel-section">
+                    <h3 class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <circle cx="5" cy="6" r="3"/><circle cx="19" cy="18" r="3"/><path d="M5 9v3a6 6 0 006 6h3"/>
+                        </svg>
+                        Route Planner
+                    </h3>
                     
+                    <div class="route-form">
+                        <!-- Origin -->
+                        <div class="form-group">
+                            <label class="form-label">
+                                <span class="label-dot origin"></span>
+                                Origin
+                            </label>
+                            <div class="input-with-btn">
+                                <input type="text" id="origin-input" class="form-input" placeholder="Click on map..." readonly>
+                                <button class="btn-icon" id="pick-origin" title="Pick on map">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="coord-inputs">
+                                <input type="number" id="origin-lat" class="form-input small" placeholder="Latitude" step="0.0001">
+                                <input type="number" id="origin-lng" class="form-input small" placeholder="Longitude" step="0.0001">
+                            </div>
+                        </div>
+
+                        <!-- Destination -->
+                        <div class="form-group">
+                            <label class="form-label">
+                                <span class="label-dot dest"></span>
+                                Destination
+                            </label>
+                            <div class="input-with-btn">
+                                <input type="text" id="dest-input" class="form-input" placeholder="Click on map..." readonly>
+                                <button class="btn-icon" id="pick-dest" title="Pick on map">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="coord-inputs">
+                                <input type="number" id="dest-lat" class="form-input small" placeholder="Latitude" step="0.0001">
+                                <input type="number" id="dest-lng" class="form-input small" placeholder="Longitude" step="0.0001">
+                            </div>
+                        </div>
+
+                        <!-- Optimize For -->
+                        <div class="form-group">
+                            <label class="form-label">Optimize for</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" id="opt-fastest" data-optimize="fastest">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                                    </svg>
+                                    Fastest
+                                </button>
+                                <button class="toggle-btn" id="opt-cheapest" data-optimize="cheapest">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+                                    </svg>
+                                    Cheapest
+                                </button>
+                                <button class="toggle-btn" id="opt-safest" data-optimize="safest">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                    </svg>
+                                    Safest
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="form-actions">
+                            <button class="btn-primary full-width" id="plan-route">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                    <circle cx="5" cy="6" r="3"/><circle cx="19" cy="18" r="3"/><path d="M5 9v3a6 6 0 006 6h3"/>
+                                </svg>
+                                Plan Route
+                            </button>
+                            <button class="btn-secondary" id="clear-route">Clear</button>
+                        </div>
+                    </div>
+
                     <!-- Route Results -->
                     <div class="route-results" id="route-results" style="display: none;">
-                        <div class="route-results-header">
-                            <span class="card-title">Route Options</span>
+                        <div class="results-header">
+                            <h4>Route Options</h4>
+                            <span class="results-hint">Click to toggle on map</span>
                         </div>
                         <div class="route-options-list" id="route-options-list">
-                            <!-- Route options will be populated here -->
-                        </div>
-                        <div class="route-recommendation" id="route-recommendation">
-                            <!-- Recommendation will be shown here -->
+                            <!-- Populated by JS -->
                         </div>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Data Layers Card -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Data Layers</span>
-                    <span class="card-badge" id="date-badge">All Data</span>
-                </div>
-                <div class="layer-list">
-                    <label class="layer-toggle active">
-                        <input type="checkbox" id="layer-taxi" checked>
-                        <span class="layer-checkbox"></span>
-                        <span class="layer-color" style="color: var(--accent-yellow);"></span>
-                        <span class="layer-info">
-                            <span class="layer-name">Taxi Trips</span>
-                            <span class="layer-count" id="count-taxi">0</span>
-                        </span>
-                    </label>
-                    <label class="layer-toggle active">
-                        <input type="checkbox" id="layer-bike" checked>
-                        <span class="layer-checkbox"></span>
-                        <span class="layer-color" style="color: var(--accent-green);"></span>
-                        <span class="layer-info">
-                            <span class="layer-name">Bike Trips</span>
-                            <span class="layer-count" id="count-bike">0</span>
-                        </span>
-                    </label>
-                    <label class="layer-toggle active">
-                        <input type="checkbox" id="layer-arrests" checked>
-                        <span class="layer-checkbox"></span>
-                        <span class="layer-color" style="color: #ffffff;"></span>
-                        <span class="layer-info">
-                            <span class="layer-name">Arrests</span>
-                            <span class="layer-count" id="count-arrests">0</span>
-                        </span>
-                    </label>
-                    <label class="layer-toggle active">
-                        <input type="checkbox" id="layer-shootings" checked>
-                        <span class="layer-checkbox"></span>
-                        <span class="layer-color" style="color: var(--accent-red);"></span>
-                        <span class="layer-info">
-                            <span class="layer-name">Shootings</span>
-                            <span class="layer-count" id="count-shootings">0</span>
-                        </span>
-                    </label>
-                    <label class="layer-toggle">
-                        <input type="checkbox" id="layer-weather">
-                        <span class="layer-checkbox"></span>
-                        <span class="layer-color" style="color: var(--accent-blue);"></span>
-                        <span class="layer-info">
-                            <span class="layer-name">Precipitation</span>
-                            <span class="layer-count" id="count-weather">--</span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-            
-            <!-- Statistics Card -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Statistics</span>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-card taxi">
-                        <div class="stat-value" id="stat-taxi">-</div>
-                        <div class="stat-label">Taxi Trips</div>
+                </section>
+
+                <!-- Data Info -->
+                <section class="panel-section panel-footer">
+                    <div class="data-sources">
+                        <h4>Data Sources</h4>
+                        <ul>
+                            <li>NYC Taxi & Limousine Commission</li>
+                            <li>Citi Bike System Data</li>
+                            <li>NYPD Arrest & Shooting Data</li>
+                            <li>MTA Ridership Statistics</li>
+                            <li>Open-Meteo Weather API</li>
+                        </ul>
                     </div>
-                    <div class="stat-card bike">
-                        <div class="stat-value" id="stat-bike">-</div>
-                        <div class="stat-label">Bike Trips</div>
+                    <div class="poc-badge">
+                        <span>POC</span> v1.0
                     </div>
-                    <div class="stat-card arrests">
-                        <div class="stat-value" id="stat-arrests">-</div>
-                        <div class="stat-label">Arrests</div>
-                    </div>
-                    <div class="stat-card shootings">
-                        <div class="stat-value" id="stat-shootings">-</div>
-                        <div class="stat-label">Shootings</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- MTA Ridership Card -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">MTA Ridership (Subway & Bus)</span>
-                </div>
-                <div id="mta-single-day" style="display: none;">
-                    <div class="mta-grid">
-                        <div class="mta-stat">
-                            <div class="mta-value" id="mta-subway">-</div>
-                            <div class="mta-label">Subway</div>
-                        </div>
-                        <div class="mta-stat">
-                            <div class="mta-value" id="mta-bus">-</div>
-                            <div class="mta-label">Bus</div>
-                        </div>
-                        <div class="mta-stat">
-                            <div class="mta-value" id="mta-lirr">-</div>
-                            <div class="mta-label">LIRR</div>
-                        </div>
-                        <div class="mta-stat">
-                            <div class="mta-value" id="mta-metro">-</div>
-                            <div class="mta-label">Metro-North</div>
-                        </div>
-                    </div>
-                </div>
-                <div id="mta-chart-container" class="chart-wrapper">
-                    <canvas id="mta-chart"></canvas>
-                </div>
-            </div>
-            
-            <!-- Borough Chart Card -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Incidents by Borough</span>
-                </div>
-                <div class="chart-wrapper">
-                    <canvas id="boro-chart"></canvas>
-                </div>
-            </div>
-        </aside>
-        
-        <!-- Main Content -->
-        <main class="main">
-            <div id="map"></div>
-            
-            <div class="loading-overlay" id="loading">
-                <div class="loader"></div>
-                <div class="loading-text">Loading NYC data...</div>
-            </div>
-            
-            <div class="map-legend">
-                <div class="legend-title">Legend</div>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <span class="legend-dot" style="color: var(--accent-yellow);"></span>
-                        <span>Taxi Pickup</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-dot" style="color: var(--accent-green);"></span>
-                        <span>Bike Station</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-dot" style="color: #ffffff;"></span>
-                        <span>Arrest</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-dot" style="color: var(--accent-red);"></span>
-                        <span>Shooting</span>
-                    </div>
-                    <div class="legend-item" id="legend-precip" style="display: none;">
-                        <span class="legend-gradient"></span>
-                        <span>Precipitation (mm)</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Route Legend (shown when routes are displayed) -->
-            <div class="route-legend" id="route-legend" style="display: none;">
-                <div class="route-legend-title">Routes</div>
-                <div class="route-legend-item">
-                    <span class="route-legend-line fastest"></span>
-                    <span>Fastest</span>
-                </div>
-                <div class="route-legend-item">
-                    <span class="route-legend-line cheapest"></span>
-                    <span>Cheapest</span>
-                </div>
-                <div class="route-legend-item">
-                    <span class="route-legend-line safest"></span>
-                    <span>Safest</span>
-                </div>
-            </div>
-        </main>
+                </section>
+            </aside>
+        </div>
     </div>
-    
+
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
