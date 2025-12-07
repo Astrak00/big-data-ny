@@ -647,8 +647,20 @@ export async function getShootingsByBorough(
   const rows = await query;
   const result: Record<string, number> = {};
 
+  // Normalize borough names to proper case to match arrests data
+  const normalizeBorough = (boro: string): string => {
+    if (!boro) return "Unknown";
+    // Handle uppercase names like "MANHATTAN" -> "Manhattan", "STATEN ISLAND" -> "Staten Island"
+    return boro
+      .toLowerCase()
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  };
+
   for (const row of rows) {
-    result[row.boro || "Unknown"] = parseInt(row.count) || 0;
+    const boro = normalizeBorough(row.boro);
+    result[boro] = parseInt(row.count) || 0;
   }
 
   return result;
@@ -875,8 +887,22 @@ export async function fetchOSRMRoute(
   destination: RoutePoint,
   mode: "driving" | "cycling" | "walking"
 ): Promise<RouteSegment | null> {
+  const routes = await fetchOSRMRoutes(origin, destination, mode, 1);
+  return routes.length > 0 ? routes[0] : null;
+}
+
+/**
+ * Fetch multiple route alternatives from OSRM
+ * Returns up to `maxAlternatives` different routes
+ */
+export async function fetchOSRMRoutes(
+  origin: RoutePoint,
+  destination: RoutePoint,
+  mode: "driving" | "cycling" | "walking",
+  maxAlternatives: number = 3
+): Promise<RouteSegment[]> {
   const profile = mode === "driving" ? "car" : mode === "cycling" ? "bike" : "foot";
-  const url = `https://router.project-osrm.org/route/v1/${profile}/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&alternatives=true`;
 
   try {
     const response = await fetch(url);
@@ -884,19 +910,18 @@ export async function fetchOSRMRoute(
 
     if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {
       console.error("OSRM routing failed:", data);
-      return null;
+      return [];
     }
 
-    const route = data.routes[0];
-    return {
+    return data.routes.slice(0, maxAlternatives).map((route: any) => ({
       geometry: route.geometry.coordinates as [number, number][],
       distance: route.distance,
       duration: route.duration,
       mode: mode,
-    };
+    }));
   } catch (error) {
-    console.error("Error fetching OSRM route:", error);
-    return null;
+    console.error("Error fetching OSRM routes:", error);
+    return [];
   }
 }
 
@@ -1103,7 +1128,7 @@ export async function findNearbyBikeStations(
 
 /**
  * Main route planning function
- * Calculates multiple route options with different transport modes
+ * Calculates multiple route options with different transport modes and alternative paths
  */
 export async function planRoute(
   origin: RoutePoint,
@@ -1132,9 +1157,10 @@ export async function planRoute(
   const straightLineDistanceKm = haversineDistance(origin, destination);
   const straightLineDistanceMiles = straightLineDistanceKm * 0.621371;
 
-  // 1. Taxi Route (driving)
-  const taxiRoute = await fetchOSRMRoute(origin, destination, "driving");
-  if (taxiRoute) {
+  // 1. Taxi Routes (driving) - get multiple alternatives
+  const taxiRoutes = await fetchOSRMRoutes(origin, destination, "driving", 3);
+  for (let i = 0; i < taxiRoutes.length; i++) {
+    const taxiRoute = taxiRoutes[i];
     const distanceMiles = taxiRoute.distance / 1609.34;
     // NYC Taxi fare: $3 base + $2.50/mile + time charges
     const baseFare = 3.0;
@@ -1156,9 +1182,10 @@ export async function planRoute(
     result.options.push(taxiOption);
   }
 
-  // 2. Bike Route (cycling)
-  const bikeRoute = await fetchOSRMRoute(origin, destination, "cycling");
-  if (bikeRoute) {
+  // 2. Bike Routes (cycling) - get multiple alternatives
+  const bikeRoutes = await fetchOSRMRoutes(origin, destination, "cycling", 3);
+  for (let i = 0; i < bikeRoutes.length; i++) {
+    const bikeRoute = bikeRoutes[i];
     const durationMinutes = bikeRoute.duration / 60;
     // Citi Bike: $4.49 for 30 min, $0.26/min after
     let estimatedCost = 4.49;
@@ -1180,7 +1207,7 @@ export async function planRoute(
     result.options.push(bikeOption);
   }
 
-  // 3. Walking Route
+  // 3. Walking Route (single, for reference only - not used in cost comparison)
   const walkRoute = await fetchOSRMRoute(origin, destination, "walking");
   if (walkRoute) {
     const crimeStats = await getCrimeAlongRoute(walkRoute.geometry);
@@ -1222,22 +1249,51 @@ export async function planRoute(
     result.options.push(metroOption);
   }
 
-  // Determine recommendations
+  // Determine recommendations - ensure different routes when possible
   if (result.options.length > 0) {
-    // Fastest
+    // Fastest - consider all options
     result.recommendation.fastest = result.options.reduce((prev, curr) =>
       curr.totalDuration < prev.totalDuration ? curr : prev
     );
 
-    // Cheapest
-    result.recommendation.cheapest = result.options.reduce((prev, curr) =>
-      curr.estimatedCost < prev.estimatedCost ? curr : prev
-    );
+    // Cheapest - exclude walking (free but slow, not a fair comparison)
+    const paidOptions = result.options.filter(opt => opt.mode !== "walking");
+    if (paidOptions.length > 0) {
+      result.recommendation.cheapest = paidOptions.reduce((prev, curr) =>
+        curr.estimatedCost < prev.estimatedCost ? curr : prev
+      );
+    } else {
+      // Fallback if only walking is available
+      result.recommendation.cheapest = result.options[0];
+    }
 
-    // Safest (lowest crime score)
-    result.recommendation.safest = result.options.reduce((prev, curr) =>
-      curr.crimeScore < prev.crimeScore ? curr : prev
-    );
+    // Safest (lowest crime score) - prefer a different route than fastest if possible
+    const sortedBySafety = [...result.options].sort((a, b) => a.crimeScore - b.crimeScore);
+    result.recommendation.safest = sortedBySafety[0];
+    
+    // If safest is same as fastest, try to pick the next safest option
+    if (result.recommendation.safest === result.recommendation.fastest && sortedBySafety.length > 1) {
+      // Check if there's a meaningfully different alternative
+      const alternative = sortedBySafety.find(opt => 
+        opt !== result.recommendation.fastest && 
+        opt.crimeScore <= sortedBySafety[0].crimeScore * 1.2 // Within 20% of safest
+      );
+      if (alternative) {
+        result.recommendation.safest = alternative;
+      }
+    }
+    
+    // If cheapest is same as fastest, try to pick a cheaper alternative
+    if (result.recommendation.cheapest === result.recommendation.fastest && paidOptions.length > 1) {
+      const sortedByCost = [...paidOptions].sort((a, b) => a.estimatedCost - b.estimatedCost);
+      const alternative = sortedByCost.find(opt => 
+        opt !== result.recommendation.fastest &&
+        opt.estimatedCost <= sortedByCost[0].estimatedCost * 1.1 // Within 10% of cheapest
+      );
+      if (alternative) {
+        result.recommendation.cheapest = alternative;
+      }
+    }
   }
 
   return result;

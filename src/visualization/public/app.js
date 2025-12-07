@@ -720,7 +720,7 @@ async function loadData(startDate, endDate) {
         populateLayers(state.allData);
         
         // Update charts
-        var isSingleDay = !!(startDate && !endDate);
+        var isSingleDay = !!(startDate && (!endDate || startDate === endDate));
         updateCharts(mta, aggregate, isSingleDay);
         
         loading.classList.add('hidden');
