@@ -27,7 +27,17 @@ var state = {
         optimizeFor: 'fastest', // 'fastest' | 'cheapest' | 'safest'
         currentRoute: null,     // Route result from API
         selectedOption: null,   // Currently selected route option
-        routeLayers: []         // Leaflet layers for routes
+        routeLayers: [],        // Leaflet layers for routes
+        bestRoutes: {           // Best route for each category
+            fastest: null,
+            cheapest: null,
+            safest: null
+        },
+        visibleRoutes: {        // Which routes are visible on map
+            fastest: true,
+            cheapest: true,
+            safest: true
+        }
     }
 };
 
@@ -1171,6 +1181,7 @@ async function planRoute() {
 
 /**
  * Display route results in the UI
+ * Shows all three optimal routes: fastest, cheapest, safest
  */
 function displayRouteResults(routeData) {
     var resultsDiv = getElement('route-results');
@@ -1184,30 +1195,115 @@ function displayRouteResults(routeData) {
     
     var recommendation = routeData.recommendation;
     
+    // Store the three best routes for display
+    state.routePlanner.bestRoutes = {
+        fastest: recommendation.fastest,
+        cheapest: recommendation.cheapest,
+        safest: recommendation.safest
+    };
+    
+    // Initialize visibility state for each route type
+    if (!state.routePlanner.visibleRoutes) {
+        state.routePlanner.visibleRoutes = {
+            fastest: true,
+            cheapest: true,
+            safest: true
+        };
+    }
+    
+    // Create header for best routes section
+    var bestRoutesHeader = document.createElement('div');
+    bestRoutesHeader.className = 'route-section-header';
+    bestRoutesHeader.innerHTML = '<span class="section-title">Best Routes</span><span class="section-hint">Click to toggle on map</span>';
+    optionsList.appendChild(bestRoutesHeader);
+    
+    // Display the three best route cards
+    var routeTypes = ['fastest', 'cheapest', 'safest'];
+    routeTypes.forEach(function(type) {
+        var option = recommendation[type];
+        if (!option) return;
+        
+        var optionEl = document.createElement('div');
+        optionEl.className = 'route-option best-route ' + type;
+        optionEl.setAttribute('data-route-type', type);
+        
+        // Check if this route is currently visible
+        if (state.routePlanner.visibleRoutes[type]) {
+            optionEl.classList.add('visible');
+        }
+        
+        var durationMin = Math.round(option.totalDuration / 60);
+        var distanceKm = (option.totalDistance / 1000).toFixed(1);
+        var crimeLevel = option.crimeScore < 10 ? 'Low' : option.crimeScore < 50 ? 'Medium' : 'High';
+        var crimeClass = option.crimeScore < 10 ? 'low' : option.crimeScore < 50 ? 'medium' : 'high';
+        
+        var typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+        var typeIcon = type === 'fastest' ? '\u26A1' : type === 'cheapest' ? '\uD83D\uDCB0' : '\uD83D\uDEE1\uFE0F';
+        
+        optionEl.innerHTML = 
+            '<div class="route-option-header">' +
+                '<div class="route-option-mode">' +
+                    '<span class="route-type-icon">' + typeIcon + '</span>' +
+                    '<span class="route-type-label">' + typeLabel + '</span>' +
+                    '<span class="route-mode-badge">' + ROUTE_ICONS[option.mode] + ' ' + capitalizeFirst(option.mode) + '</span>' +
+                '</div>' +
+                '<div class="route-visibility-toggle" title="Toggle on map">' +
+                    '<span class="toggle-indicator"></span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="route-option-stats">' +
+                '<div class="route-stat time">' +
+                    '<div class="route-stat-value">' + durationMin + ' min</div>' +
+                    '<div class="route-stat-label">Duration</div>' +
+                '</div>' +
+                '<div class="route-stat cost">' +
+                    '<div class="route-stat-value">$' + option.estimatedCost.toFixed(2) + '</div>' +
+                    '<div class="route-stat-label">Cost</div>' +
+                '</div>' +
+                '<div class="route-stat safety ' + crimeClass + '">' +
+                    '<div class="route-stat-value">' + crimeLevel + '</div>' +
+                    '<div class="route-stat-label">Crime</div>' +
+                '</div>' +
+            '</div>';
+        
+        optionEl.addEventListener('click', function() {
+            toggleRouteVisibility(type);
+        });
+        
+        optionsList.appendChild(optionEl);
+    });
+    
+    // Add separator
+    var separator = document.createElement('div');
+    separator.className = 'route-section-separator';
+    optionsList.appendChild(separator);
+    
+    // Create header for all options section
+    var allOptionsHeader = document.createElement('div');
+    allOptionsHeader.className = 'route-section-header';
+    allOptionsHeader.innerHTML = '<span class="section-title">All Options</span>';
+    optionsList.appendChild(allOptionsHeader);
+    
+    // Display all route options
     routeData.options.forEach(function(option, index) {
-        var isRecommended = false;
         var badges = [];
         
         if (recommendation.fastest && recommendation.fastest.mode === option.mode) {
             badges.push('fastest');
-            if (state.routePlanner.optimizeFor === 'fastest') isRecommended = true;
         }
         if (recommendation.cheapest && recommendation.cheapest.mode === option.mode) {
             badges.push('cheapest');
-            if (state.routePlanner.optimizeFor === 'cheapest') isRecommended = true;
         }
         if (recommendation.safest && recommendation.safest.mode === option.mode) {
             badges.push('safest');
-            if (state.routePlanner.optimizeFor === 'safest') isRecommended = true;
         }
         
         var optionEl = document.createElement('div');
-        optionEl.className = 'route-option' + (isRecommended ? ' recommended' : '');
+        optionEl.className = 'route-option all-option';
         optionEl.setAttribute('data-mode', option.mode);
         optionEl.setAttribute('data-index', index);
         
         var durationMin = Math.round(option.totalDuration / 60);
-        var distanceKm = (option.totalDistance / 1000).toFixed(1);
         var crimeLevel = option.crimeScore < 10 ? 'Low' : option.crimeScore < 50 ? 'Medium' : 'High';
         
         var badgesHtml = badges.map(function(b) {
@@ -1222,75 +1318,149 @@ function displayRouteResults(routeData) {
                 '</div>' +
                 '<div>' + badgesHtml + '</div>' +
             '</div>' +
-            '<div class="route-option-stats">' +
-                '<div class="route-stat time">' +
-                    '<div class="route-stat-value">' + durationMin + ' min</div>' +
-                    '<div class="route-stat-label">Duration</div>' +
-                '</div>' +
-                '<div class="route-stat cost">' +
-                    '<div class="route-stat-value">$' + option.estimatedCost.toFixed(2) + '</div>' +
-                    '<div class="route-stat-label">Cost</div>' +
-                '</div>' +
-                '<div class="route-stat safety">' +
-                    '<div class="route-stat-value">' + crimeLevel + '</div>' +
-                    '<div class="route-stat-label">Crime</div>' +
-                '</div>' +
+            '<div class="route-option-stats-mini">' +
+                '<span class="mini-stat">' + durationMin + ' min</span>' +
+                '<span class="mini-stat">$' + option.estimatedCost.toFixed(2) + '</span>' +
+                '<span class="mini-stat">' + crimeLevel + '</span>' +
             '</div>';
         
         optionEl.addEventListener('click', function() {
-            selectRouteOption(option, index);
+            showSingleRoute(option, index);
         });
         
         optionsList.appendChild(optionEl);
     });
     
-    // Show recommendation
+    // Show comparison summary
     if (recommendationDiv) {
-        var recOption = recommendation[state.routePlanner.optimizeFor];
-        if (recOption) {
-            var recTime = Math.round(recOption.totalDuration / 60);
-            recommendationDiv.innerHTML = 
-                '<strong>Recommended:</strong> Take ' + ROUTE_ICONS[recOption.mode] + ' ' + 
-                capitalizeFirst(recOption.mode) + ' (' + recTime + ' min, $' + recOption.estimatedCost.toFixed(2) + ')';
-            recommendationDiv.style.display = 'block';
+        var fastest = recommendation.fastest;
+        var cheapest = recommendation.cheapest;
+        var safest = recommendation.safest;
+        
+        var summaryHtml = '<div class="route-comparison-summary">';
+        summaryHtml += '<div class="comparison-title">Route Comparison</div>';
+        summaryHtml += '<div class="comparison-grid">';
+        
+        if (fastest) {
+            var fastTime = Math.round(fastest.totalDuration / 60);
+            summaryHtml += '<div class="comparison-item fastest">' +
+                '<span class="comp-label">\u26A1 Fastest</span>' +
+                '<span class="comp-value">' + fastTime + ' min</span>' +
+                '<span class="comp-mode">' + ROUTE_ICONS[fastest.mode] + '</span>' +
+            '</div>';
         }
+        
+        if (cheapest) {
+            summaryHtml += '<div class="comparison-item cheapest">' +
+                '<span class="comp-label">\uD83D\uDCB0 Cheapest</span>' +
+                '<span class="comp-value">$' + cheapest.estimatedCost.toFixed(2) + '</span>' +
+                '<span class="comp-mode">' + ROUTE_ICONS[cheapest.mode] + '</span>' +
+            '</div>';
+        }
+        
+        if (safest) {
+            var safeLevel = safest.crimeScore < 10 ? 'Low crime' : safest.crimeScore < 50 ? 'Med crime' : 'High crime';
+            summaryHtml += '<div class="comparison-item safest">' +
+                '<span class="comp-label">\uD83D\uDEE1\uFE0F Safest</span>' +
+                '<span class="comp-value">' + safeLevel + '</span>' +
+                '<span class="comp-mode">' + ROUTE_ICONS[safest.mode] + '</span>' +
+            '</div>';
+        }
+        
+        summaryHtml += '</div></div>';
+        recommendationDiv.innerHTML = summaryHtml;
+        recommendationDiv.style.display = 'block';
     }
     
-    // Auto-select the recommended option
-    var recOption = recommendation[state.routePlanner.optimizeFor];
-    if (recOption) {
-        var recIndex = routeData.options.findIndex(function(o) { return o.mode === recOption.mode; });
-        if (recIndex >= 0) {
-            selectRouteOption(recOption, recIndex);
-        }
-    }
+    // Draw all visible routes on the map
+    drawAllVisibleRoutes();
 }
 
 /**
- * Select and display a route option on the map
+ * Toggle visibility of a route type on the map
  */
-function selectRouteOption(option, index) {
-    state.routePlanner.selectedOption = option;
+function toggleRouteVisibility(type) {
+    state.routePlanner.visibleRoutes[type] = !state.routePlanner.visibleRoutes[type];
     
-    // Update UI selection
-    var options = document.querySelectorAll('.route-option');
-    options.forEach(function(el, i) {
+    // Update UI
+    var optionEl = document.querySelector('.route-option[data-route-type="' + type + '"]');
+    if (optionEl) {
+        optionEl.classList.toggle('visible', state.routePlanner.visibleRoutes[type]);
+    }
+    
+    // Redraw routes
+    drawAllVisibleRoutes();
+}
+
+/**
+ * Show only a single route (when clicking on "All Options")
+ */
+function showSingleRoute(option, index) {
+    // Hide all best routes
+    state.routePlanner.visibleRoutes = {
+        fastest: false,
+        cheapest: false,
+        safest: false
+    };
+    
+    // Update UI
+    document.querySelectorAll('.route-option.best-route').forEach(function(el) {
+        el.classList.remove('visible');
+    });
+    
+    // Update all options selection
+    document.querySelectorAll('.route-option.all-option').forEach(function(el, i) {
         el.classList.toggle('selected', i === index);
     });
     
-    // Clear previous routes and draw new one
-    drawRouteOnMap(option);
+    // Draw just this route
+    layers.routes.clearLayers();
+    drawRouteOnMap(option, option.mode, true);
+}
+
+/**
+ * Draw all visible routes on the map
+ */
+function drawAllVisibleRoutes() {
+    layers.routes.clearLayers();
+    
+    var bounds = null;
+    var routeTypes = ['safest', 'cheapest', 'fastest']; // Draw in this order so fastest is on top
+    
+    routeTypes.forEach(function(type) {
+        if (state.routePlanner.visibleRoutes[type] && state.routePlanner.bestRoutes[type]) {
+            var option = state.routePlanner.bestRoutes[type];
+            var polyline = drawRouteOnMap(option, type, false);
+            if (polyline && bounds) {
+                bounds.extend(polyline.getBounds());
+            } else if (polyline) {
+                bounds = polyline.getBounds();
+            }
+        }
+    });
+    
+    // Fit map to show all routes
+    if (bounds) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
+    
+    // Deselect all options
+    document.querySelectorAll('.route-option.all-option').forEach(function(el) {
+        el.classList.remove('selected');
+    });
 }
 
 /**
  * Draw a route on the map
+ * @param {Object} option - Route option to draw
+ * @param {string} type - Route type (fastest/cheapest/safest) or mode (taxi/bike/etc)
+ * @param {boolean} fitBounds - Whether to fit map bounds to this route
+ * @returns {L.Polyline} The created polyline
  */
-function drawRouteOnMap(option) {
-    layers.routes.clearLayers();
-    
+function drawRouteOnMap(option, type, fitBounds) {
     if (!option.geometry || option.geometry.length === 0) {
         console.warn('No geometry for route option');
-        return;
+        return null;
     }
     
     // Convert [lng, lat] to [lat, lng] for Leaflet
@@ -1298,26 +1468,73 @@ function drawRouteOnMap(option) {
         return [coord[1], coord[0]];
     });
     
+    // Colors for optimization types
+    var typeColors = {
+        fastest: '#3b82f6',  // blue
+        cheapest: '#10b981', // green
+        safest: '#8b5cf6'    // purple
+    };
+    
+    var color = typeColors[type] || ROUTE_COLORS[option.mode] || '#3b82f6';
+    
     var lineStyle = {
-        color: ROUTE_COLORS[option.mode] || '#3b82f6',
+        color: color,
         weight: 5,
         opacity: 0.8,
         smoothFactor: 1
     };
     
-    // Add dashed style for metro and walking
-    if (option.mode === 'metro') {
+    // Add dashed style for safest routes or metro/walking
+    if (type === 'safest') {
+        lineStyle.dashArray = '8, 4';
+        lineStyle.weight = 6;
+    } else if (type === 'cheapest') {
+        lineStyle.weight = 5;
+    } else if (type === 'fastest') {
+        lineStyle.weight = 6;
+    }
+    
+    // If drawing by mode, use mode-specific styles
+    if (option.mode === 'metro' && !typeColors[type]) {
         lineStyle.dashArray = '10, 5';
-    } else if (option.mode === 'walking') {
+    } else if (option.mode === 'walking' && !typeColors[type]) {
         lineStyle.dashArray = '5, 5';
         lineStyle.weight = 4;
     }
     
     var polyline = L.polyline(latlngs, lineStyle);
+    
+    // Add popup with route info
+    var durationMin = Math.round(option.totalDuration / 60);
+    var crimeLevel = option.crimeScore < 10 ? 'Low' : option.crimeScore < 50 ? 'Medium' : 'High';
+    var typeLabel = typeColors[type] ? (type.charAt(0).toUpperCase() + type.slice(1) + ' Route') : capitalizeFirst(option.mode);
+    
+    polyline.bindPopup(
+        '<div class="popup-content">' +
+        '<h4 style="color:' + color + ';">' + typeLabel + '</h4>' +
+        '<p><span class="label">Mode</span><span class="value">' + ROUTE_ICONS[option.mode] + ' ' + capitalizeFirst(option.mode) + '</span></p>' +
+        '<p><span class="label">Duration</span><span class="value">' + durationMin + ' min</span></p>' +
+        '<p><span class="label">Cost</span><span class="value">$' + option.estimatedCost.toFixed(2) + '</span></p>' +
+        '<p><span class="label">Crime Level</span><span class="value">' + crimeLevel + '</span></p>' +
+        '</div>'
+    );
+    
     layers.routes.addLayer(polyline);
     
     // Fit map to show the route
-    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+    if (fitBounds) {
+        map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+    }
+    
+    return polyline;
+}
+
+/**
+ * Select and display a route option on the map (legacy - kept for compatibility)
+ */
+function selectRouteOption(option, index) {
+    state.routePlanner.selectedOption = option;
+    showSingleRoute(option, index);
 }
 
 /**

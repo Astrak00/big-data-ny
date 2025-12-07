@@ -1132,3 +1132,301 @@ body {
     stroke-opacity: 0.8;
     stroke-dasharray: 5, 5;
 }
+
+/* ===========================================
+   Multi-Route Display
+   =========================================== */
+
+.route-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 8px;
+}
+
+.section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.section-hint {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.route-section-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 12px 0;
+}
+
+/* Best Route Cards */
+.route-option.best-route {
+    border-width: 2px;
+    position: relative;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.route-option.best-route.visible {
+    opacity: 1;
+    border-color: var(--accent-blue);
+}
+
+.route-option.best-route.fastest {
+    border-left: 4px solid var(--accent-blue);
+}
+
+.route-option.best-route.fastest.visible {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+}
+
+.route-option.best-route.cheapest {
+    border-left: 4px solid var(--accent-green);
+}
+
+.route-option.best-route.cheapest.visible {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.route-option.best-route.safest {
+    border-left: 4px solid var(--accent-purple);
+}
+
+.route-option.best-route.safest.visible {
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+}
+
+.route-type-icon {
+    font-size: 1rem;
+}
+
+.route-type-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-right: 8px;
+}
+
+.route-mode-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: var(--bg-card);
+    border-radius: 100px;
+    color: var(--text-secondary);
+}
+
+.route-visibility-toggle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.route-option.best-route.visible .route-visibility-toggle {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+
+.route-option.best-route.fastest.visible .route-visibility-toggle {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+
+.route-option.best-route.cheapest.visible .route-visibility-toggle {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.route-option.best-route.safest.visible .route-visibility-toggle {
+    background: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+.toggle-indicator::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: white;
+    display: none;
+}
+
+.route-option.best-route.visible .toggle-indicator::after {
+    display: block;
+}
+
+/* Crime level colors */
+.route-stat.safety.low .route-stat-value {
+    color: var(--accent-green);
+}
+
+.route-stat.safety.medium .route-stat-value {
+    color: var(--accent-yellow);
+}
+
+.route-stat.safety.high .route-stat-value {
+    color: var(--accent-red);
+}
+
+/* All Options - Mini Style */
+.route-option.all-option {
+    padding: 10px 12px;
+}
+
+.route-option.all-option .route-option-header {
+    margin-bottom: 4px;
+}
+
+.route-option-stats-mini {
+    display: flex;
+    gap: 12px;
+}
+
+.mini-stat {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Route Comparison Summary */
+.route-comparison-summary {
+    padding: 4px 0;
+}
+
+.comparison-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.comparison-item {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: 10px 8px;
+    text-align: center;
+    border-top: 3px solid transparent;
+}
+
+.comparison-item.fastest {
+    border-top-color: var(--accent-blue);
+}
+
+.comparison-item.cheapest {
+    border-top-color: var(--accent-green);
+}
+
+.comparison-item.safest {
+    border-top-color: var(--accent-purple);
+}
+
+.comp-label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.comp-value {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.comparison-item.fastest .comp-value {
+    color: var(--accent-blue);
+}
+
+.comparison-item.cheapest .comp-value {
+    color: var(--accent-green);
+}
+
+.comparison-item.safest .comp-value {
+    color: var(--accent-purple);
+}
+
+.comp-mode {
+    font-size: 1rem;
+}
+
+/* Route Legend on Map */
+.route-legend {
+    position: absolute;
+    top: 80px;
+    right: 24px;
+    background: rgba(18, 18, 26, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    z-index: 1000;
+    min-width: 140px;
+}
+
+.route-legend-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.route-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.route-legend-item:last-child {
+    margin-bottom: 0;
+}
+
+.route-legend-line {
+    width: 20px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+.route-legend-line.fastest {
+    background: var(--accent-blue);
+}
+
+.route-legend-line.cheapest {
+    background: var(--accent-green);
+}
+
+.route-legend-line.safest {
+    background: var(--accent-purple);
+    background-image: repeating-linear-gradient(
+        90deg,
+        var(--accent-purple),
+        var(--accent-purple) 4px,
+        transparent 4px,
+        transparent 6px
+    );
+}
