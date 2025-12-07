@@ -61,6 +61,63 @@
         
         <!-- Sidebar -->
         <aside class="sidebar">
+            <!-- Route Planner Card -->
+            <div class="card route-planner-card">
+                <div class="card-header">
+                    <span class="card-title">Route Planner</span>
+                    <button class="btn btn-small" id="toggle-route-planner" title="Collapse/Expand">-</button>
+                </div>
+                <div class="route-planner-content" id="route-planner-content">
+                    <div class="route-input-group">
+                        <label>Origin</label>
+                        <div class="route-input-row">
+                            <input type="text" id="origin-input" placeholder="Click map or enter coords" readonly>
+                            <button class="btn btn-small btn-icon" id="pick-origin" title="Pick on map">O</button>
+                        </div>
+                        <div class="route-coords">
+                            <input type="number" id="origin-lat" placeholder="Lat" step="0.001">
+                            <input type="number" id="origin-lng" placeholder="Lng" step="0.001">
+                        </div>
+                    </div>
+                    <div class="route-input-group">
+                        <label>Destination</label>
+                        <div class="route-input-row">
+                            <input type="text" id="dest-input" placeholder="Click map or enter coords" readonly>
+                            <button class="btn btn-small btn-icon" id="pick-dest" title="Pick on map">D</button>
+                        </div>
+                        <div class="route-coords">
+                            <input type="number" id="dest-lat" placeholder="Lat" step="0.001">
+                            <input type="number" id="dest-lng" placeholder="Lng" step="0.001">
+                        </div>
+                    </div>
+                    <div class="route-options">
+                        <label>Optimize for:</label>
+                        <div class="route-optimize-btns">
+                            <button class="btn btn-optimize active" id="opt-fastest" data-optimize="fastest">Fastest</button>
+                            <button class="btn btn-optimize" id="opt-cheapest" data-optimize="cheapest">Cheapest</button>
+                            <button class="btn btn-optimize" id="opt-safest" data-optimize="safest">Safest</button>
+                        </div>
+                    </div>
+                    <div class="route-actions">
+                        <button class="btn btn-primary" id="plan-route">Plan Route</button>
+                        <button class="btn btn-secondary" id="clear-route">Clear</button>
+                    </div>
+                    
+                    <!-- Route Results -->
+                    <div class="route-results" id="route-results" style="display: none;">
+                        <div class="route-results-header">
+                            <span class="card-title">Route Options</span>
+                        </div>
+                        <div class="route-options-list" id="route-options-list">
+                            <!-- Route options will be populated here -->
+                        </div>
+                        <div class="route-recommendation" id="route-recommendation">
+                            <!-- Recommendation will be shown here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Data Layers Card -->
             <div class="card">
                 <div class="card-header">

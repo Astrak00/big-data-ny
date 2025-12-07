@@ -21,6 +21,11 @@ import {
   fetchWeatherData,
   fetchHistoricalWeather,
   fetchWeatherGrid,
+  planRoute,
+  getTaxiStats,
+  getBikeStats,
+  findNearbyBikeStations,
+  getCrimeAlongRoute,
 } from "./data-loader";
 
 // ===========================================
@@ -321,6 +326,155 @@ export function createApiRoutes(): Hono {
       return c.json({ status: "healthy", database: "connected" });
     } catch (error) {
       return c.json({ status: "unhealthy", database: "disconnected" }, 500);
+    }
+  });
+
+  // -------------------------------------------
+  // Route Planning
+  // -------------------------------------------
+  api.get("/route", async (c) => {
+    const originLat = parseFloat(c.req.query("originLat") || "");
+    const originLng = parseFloat(c.req.query("originLng") || "");
+    const destLat = parseFloat(c.req.query("destLat") || "");
+    const destLng = parseFloat(c.req.query("destLng") || "");
+    const optimizeFor = (c.req.query("optimize") || "fastest") as "fastest" | "cheapest" | "safest";
+
+    // Validate coordinates
+    if (isNaN(originLat) || isNaN(originLng) || isNaN(destLat) || isNaN(destLng)) {
+      return c.json({
+        success: false,
+        error: "Invalid coordinates. Please provide originLat, originLng, destLat, destLng",
+      }, 400);
+    }
+
+    // Validate coordinates are within NYC area (roughly)
+    const nycBounds = {
+      north: 40.92,
+      south: 40.49,
+      east: -73.70,
+      west: -74.26,
+    };
+
+    if (
+      originLat < nycBounds.south || originLat > nycBounds.north ||
+      originLng < nycBounds.west || originLng > nycBounds.east ||
+      destLat < nycBounds.south || destLat > nycBounds.north ||
+      destLng < nycBounds.west || destLng > nycBounds.east
+    ) {
+      return c.json({
+        success: false,
+        error: "Coordinates must be within NYC area",
+      }, 400);
+    }
+
+    try {
+      const result = await planRoute(
+        { lat: originLat, lng: originLng },
+        { lat: destLat, lng: destLng },
+        optimizeFor
+      );
+
+      return c.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error planning route:", error);
+      return c.json({
+        success: false,
+        error: "Failed to plan route",
+      }, 500);
+    }
+  });
+
+  // -------------------------------------------
+  // Transport Statistics
+  // -------------------------------------------
+  api.get("/transport-stats", async (c) => {
+    try {
+      const [taxiStats, bikeStats] = await Promise.all([
+        getTaxiStats(),
+        getBikeStats(),
+      ]);
+
+      return c.json({
+        success: true,
+        data: {
+          taxi: taxiStats,
+          bike: bikeStats,
+          metro: {
+            flatFare: 2.90,
+            avgSpeedMph: 17,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching transport stats:", error);
+      return c.json({
+        success: false,
+        error: "Failed to fetch transport statistics",
+      }, 500);
+    }
+  });
+
+  // -------------------------------------------
+  // Nearby Bike Stations
+  // -------------------------------------------
+  api.get("/bike-stations", async (c) => {
+    const lat = parseFloat(c.req.query("lat") || "");
+    const lng = parseFloat(c.req.query("lng") || "");
+    const radius = parseFloat(c.req.query("radius") || "500");
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return c.json({
+        success: false,
+        error: "Invalid coordinates. Please provide lat and lng",
+      }, 400);
+    }
+
+    try {
+      const stations = await findNearbyBikeStations({ lat, lng }, radius);
+
+      return c.json({
+        success: true,
+        data: stations,
+      });
+    } catch (error) {
+      console.error("Error finding bike stations:", error);
+      return c.json({
+        success: false,
+        error: "Failed to find nearby bike stations",
+      }, 500);
+    }
+  });
+
+  // -------------------------------------------
+  // Crime Density for Route
+  // -------------------------------------------
+  api.post("/crime-density", async (c) => {
+    try {
+      const body = await c.req.json();
+      const { geometry, buffer = 200 } = body;
+
+      if (!geometry || !Array.isArray(geometry) || geometry.length < 2) {
+        return c.json({
+          success: false,
+          error: "Invalid geometry. Please provide an array of [lng, lat] coordinates",
+        }, 400);
+      }
+
+      const crimeStats = await getCrimeAlongRoute(geometry, buffer);
+
+      return c.json({
+        success: true,
+        data: crimeStats,
+      });
+    } catch (error) {
+      console.error("Error calculating crime density:", error);
+      return c.json({
+        success: false,
+        error: "Failed to calculate crime density",
+      }, 500);
     }
   });
 

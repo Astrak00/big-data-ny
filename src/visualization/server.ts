@@ -109,6 +109,10 @@ console.log(`
 ║   • GET /api/aggregate - Aggregated statistics            ║
 ║   • GET /api/dates     - Available date range             ║
 ║   • GET /api/summary   - Data summary                     ║
+║   • GET /api/route     - Route planning (NEW)             ║
+║   • GET /api/transport-stats - Transport statistics       ║
+║   • GET /api/bike-stations   - Nearby bike stations       ║
+║   • POST /api/crime-density  - Crime along route          ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `);

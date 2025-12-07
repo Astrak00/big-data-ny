@@ -812,6 +812,460 @@ export async function closeDatabase(): Promise<void> {
 }
 
 // ===========================================
+// Route Planning Types
+// ===========================================
+
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+}
+
+export interface TransportStats {
+  avgCostPerMile: number;
+  avgSpeedMph: number;
+  avgDurationMinutes: number;
+  sampleSize: number;
+}
+
+export interface CrimeStats {
+  arrestCount: number;
+  shootingCount: number;
+  totalCrimeScore: number;
+  crimePerSqMile: number;
+}
+
+export interface RouteSegment {
+  geometry: [number, number][];
+  distance: number; // meters
+  duration: number; // seconds
+  mode: "driving" | "cycling" | "walking" | "transit";
+}
+
+export interface RouteOption {
+  mode: "taxi" | "bike" | "metro" | "walking";
+  segments: RouteSegment[];
+  totalDistance: number; // meters
+  totalDuration: number; // seconds
+  estimatedCost: number; // dollars
+  crimeScore: number; // lower is safer
+  geometry: [number, number][];
+}
+
+export interface RouteResult {
+  origin: RoutePoint;
+  destination: RoutePoint;
+  options: RouteOption[];
+  recommendation: {
+    fastest: RouteOption | null;
+    cheapest: RouteOption | null;
+    safest: RouteOption | null;
+  };
+}
+
+// ===========================================
+// Route Planning Functions
+// ===========================================
+
+/**
+ * Fetch route from OSRM (Open Source Routing Machine)
+ * Using the public demo server for walking, cycling, and driving
+ */
+export async function fetchOSRMRoute(
+  origin: RoutePoint,
+  destination: RoutePoint,
+  mode: "driving" | "cycling" | "walking"
+): Promise<RouteSegment | null> {
+  const profile = mode === "driving" ? "car" : mode === "cycling" ? "bike" : "foot";
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {
+      console.error("OSRM routing failed:", data);
+      return null;
+    }
+
+    const route = data.routes[0];
+    return {
+      geometry: route.geometry.coordinates as [number, number][],
+      distance: route.distance,
+      duration: route.duration,
+      mode: mode,
+    };
+  } catch (error) {
+    console.error("Error fetching OSRM route:", error);
+    return null;
+  }
+}
+
+/**
+ * Get average taxi statistics from the database
+ * Used to estimate taxi costs and travel times
+ */
+export async function getTaxiStats(): Promise<TransportStats> {
+  try {
+    const result = await sql`
+      SELECT 
+        AVG(CASE WHEN trip_distance > 0 THEN total_amount / trip_distance ELSE NULL END) as avg_cost_per_mile,
+        AVG(CASE 
+          WHEN trip_distance > 0 AND dropoff_datetime > pickup_datetime 
+          THEN trip_distance / (EXTRACT(EPOCH FROM (dropoff_datetime - pickup_datetime)) / 3600)
+          ELSE NULL 
+        END) as avg_speed_mph,
+        AVG(EXTRACT(EPOCH FROM (dropoff_datetime - pickup_datetime)) / 60) as avg_duration_minutes,
+        COUNT(*) as sample_size
+      FROM taxi_trips
+      WHERE trip_distance > 0.1 
+        AND trip_distance < 100
+        AND total_amount > 0
+        AND total_amount < 500
+        AND dropoff_datetime > pickup_datetime
+    `;
+
+    return {
+      avgCostPerMile: parseFloat(result[0]?.avg_cost_per_mile) || 3.5,
+      avgSpeedMph: parseFloat(result[0]?.avg_speed_mph) || 12,
+      avgDurationMinutes: parseFloat(result[0]?.avg_duration_minutes) || 15,
+      sampleSize: parseInt(result[0]?.sample_size) || 0,
+    };
+  } catch (error) {
+    console.error("Error getting taxi stats:", error);
+    return {
+      avgCostPerMile: 3.5, // NYC taxi default ~$3.50/mile
+      avgSpeedMph: 12, // Average NYC taxi speed
+      avgDurationMinutes: 15,
+      sampleSize: 0,
+    };
+  }
+}
+
+/**
+ * Get bike sharing statistics from the database
+ * Used to estimate bike travel times
+ */
+export async function getBikeStats(): Promise<TransportStats> {
+  try {
+    const result = await sql`
+      SELECT 
+        AVG(EXTRACT(EPOCH FROM (ended_at - started_at)) / 60) as avg_duration_minutes,
+        COUNT(*) as sample_size
+      FROM bike_trips
+      WHERE ended_at > started_at
+        AND EXTRACT(EPOCH FROM (ended_at - started_at)) > 60
+        AND EXTRACT(EPOCH FROM (ended_at - started_at)) < 7200
+    `;
+
+    // Citi Bike pricing: $4.49 single ride (30 min) or $0.26/min after
+    // Average speed: ~10 mph for city cycling
+    return {
+      avgCostPerMile: 0.45, // Estimated based on typical ride lengths
+      avgSpeedMph: 10,
+      avgDurationMinutes: parseFloat(result[0]?.avg_duration_minutes) || 15,
+      sampleSize: parseInt(result[0]?.sample_size) || 0,
+    };
+  } catch (error) {
+    console.error("Error getting bike stats:", error);
+    return {
+      avgCostPerMile: 0.45,
+      avgSpeedMph: 10,
+      avgDurationMinutes: 15,
+      sampleSize: 0,
+    };
+  }
+}
+
+/**
+ * Get MTA subway/metro statistics
+ * Flat fare pricing with average travel speeds
+ */
+export async function getMetroStats(): Promise<TransportStats> {
+  // MTA flat fare: $2.90 (as of 2024)
+  // Average subway speed: ~17 mph including stops
+  return {
+    avgCostPerMile: 0, // Flat fare, calculated separately
+    avgSpeedMph: 17,
+    avgDurationMinutes: 20,
+    sampleSize: 0,
+  };
+}
+
+/**
+ * Calculate crime density along a route corridor
+ * Uses PostGIS to find crimes within a buffer of the route
+ */
+export async function getCrimeAlongRoute(
+  routeGeometry: [number, number][],
+  bufferMeters: number = 200
+): Promise<CrimeStats> {
+  if (!routeGeometry || routeGeometry.length < 2) {
+    return { arrestCount: 0, shootingCount: 0, totalCrimeScore: 0, crimePerSqMile: 0 };
+  }
+
+  try {
+    // Create a LineString from the route coordinates
+    const lineStringCoords = routeGeometry
+      .map((coord) => `${coord[0]} ${coord[1]}`)
+      .join(",");
+    
+    const lineString = `LINESTRING(${lineStringCoords})`;
+
+    // Query arrests within buffer of the route
+    const arrestResult = await sql`
+      SELECT COUNT(*) as count
+      FROM arrests
+      WHERE ST_DWithin(
+        location::geography,
+        ST_GeomFromText(${lineString}, 4326)::geography,
+        ${bufferMeters}
+      )
+    `;
+
+    // Query shootings within buffer of the route
+    const shootingResult = await sql`
+      SELECT COUNT(*) as count
+      FROM shootings
+      WHERE ST_DWithin(
+        location::geography,
+        ST_GeomFromText(${lineString}, 4326)::geography,
+        ${bufferMeters}
+      )
+    `;
+
+    const arrestCount = parseInt(arrestResult[0]?.count) || 0;
+    const shootingCount = parseInt(shootingResult[0]?.count) || 0;
+
+    // Calculate route length and buffer area for density
+    const lengthResult = await sql`
+      SELECT ST_Length(ST_GeomFromText(${lineString}, 4326)::geography) as length_meters
+    `;
+    const routeLengthMeters = parseFloat(lengthResult[0]?.length_meters) || 1000;
+    
+    // Buffer area in square miles (approximate)
+    const bufferAreaSqMiles = (routeLengthMeters * bufferMeters * 2) / 2589988; // sq meters to sq miles
+
+    // Crime score: shootings weighted 5x more than arrests
+    const totalCrimeScore = arrestCount + shootingCount * 5;
+    const crimePerSqMile = bufferAreaSqMiles > 0 ? totalCrimeScore / bufferAreaSqMiles : 0;
+
+    return {
+      arrestCount,
+      shootingCount,
+      totalCrimeScore,
+      crimePerSqMile,
+    };
+  } catch (error) {
+    console.error("Error calculating crime along route:", error);
+    return { arrestCount: 0, shootingCount: 0, totalCrimeScore: 0, crimePerSqMile: 0 };
+  }
+}
+
+/**
+ * Find nearby bike stations to a point
+ */
+export async function findNearbyBikeStations(
+  point: RoutePoint,
+  radiusMeters: number = 500
+): Promise<{ stationName: string; lat: number; lng: number; distance: number }[]> {
+  try {
+    const result = await sql`
+      SELECT DISTINCT ON (start_station_name)
+        start_station_name as station_name,
+        ST_Y(start_point) as lat,
+        ST_X(start_point) as lng,
+        ST_Distance(
+          start_point::geography,
+          ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography
+        ) as distance
+      FROM bike_trips
+      WHERE start_point IS NOT NULL
+        AND ST_DWithin(
+          start_point::geography,
+          ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography,
+          ${radiusMeters}
+        )
+      ORDER BY start_station_name, distance
+      LIMIT 5
+    `;
+
+    return result.map((row: any) => ({
+      stationName: row.station_name,
+      lat: parseFloat(row.lat),
+      lng: parseFloat(row.lng),
+      distance: parseFloat(row.distance),
+    }));
+  } catch (error) {
+    console.error("Error finding nearby bike stations:", error);
+    return [];
+  }
+}
+
+/**
+ * Main route planning function
+ * Calculates multiple route options with different transport modes
+ */
+export async function planRoute(
+  origin: RoutePoint,
+  destination: RoutePoint,
+  optimizeFor: "fastest" | "cheapest" | "safest" = "fastest"
+): Promise<RouteResult> {
+  const result: RouteResult = {
+    origin,
+    destination,
+    options: [],
+    recommendation: {
+      fastest: null,
+      cheapest: null,
+      safest: null,
+    },
+  };
+
+  // Get transport statistics
+  const [taxiStats, bikeStats, metroStats] = await Promise.all([
+    getTaxiStats(),
+    getBikeStats(),
+    getMetroStats(),
+  ]);
+
+  // Calculate straight-line distance for estimations
+  const straightLineDistanceKm = haversineDistance(origin, destination);
+  const straightLineDistanceMiles = straightLineDistanceKm * 0.621371;
+
+  // 1. Taxi Route (driving)
+  const taxiRoute = await fetchOSRMRoute(origin, destination, "driving");
+  if (taxiRoute) {
+    const distanceMiles = taxiRoute.distance / 1609.34;
+    // NYC Taxi fare: $3 base + $2.50/mile + time charges
+    const baseFare = 3.0;
+    const mileageCharge = distanceMiles * 2.5;
+    const timeCharge = (taxiRoute.duration / 60) * 0.5; // ~$0.50/min in traffic
+    const estimatedCost = baseFare + mileageCharge + timeCharge;
+    
+    const crimeStats = await getCrimeAlongRoute(taxiRoute.geometry);
+
+    const taxiOption: RouteOption = {
+      mode: "taxi",
+      segments: [taxiRoute],
+      totalDistance: taxiRoute.distance,
+      totalDuration: taxiRoute.duration,
+      estimatedCost: Math.round(estimatedCost * 100) / 100,
+      crimeScore: crimeStats.totalCrimeScore,
+      geometry: taxiRoute.geometry,
+    };
+    result.options.push(taxiOption);
+  }
+
+  // 2. Bike Route (cycling)
+  const bikeRoute = await fetchOSRMRoute(origin, destination, "cycling");
+  if (bikeRoute) {
+    const durationMinutes = bikeRoute.duration / 60;
+    // Citi Bike: $4.49 for 30 min, $0.26/min after
+    let estimatedCost = 4.49;
+    if (durationMinutes > 30) {
+      estimatedCost += (durationMinutes - 30) * 0.26;
+    }
+
+    const crimeStats = await getCrimeAlongRoute(bikeRoute.geometry);
+
+    const bikeOption: RouteOption = {
+      mode: "bike",
+      segments: [bikeRoute],
+      totalDistance: bikeRoute.distance,
+      totalDuration: bikeRoute.duration,
+      estimatedCost: Math.round(estimatedCost * 100) / 100,
+      crimeScore: crimeStats.totalCrimeScore,
+      geometry: bikeRoute.geometry,
+    };
+    result.options.push(bikeOption);
+  }
+
+  // 3. Walking Route
+  const walkRoute = await fetchOSRMRoute(origin, destination, "walking");
+  if (walkRoute) {
+    const crimeStats = await getCrimeAlongRoute(walkRoute.geometry);
+
+    const walkOption: RouteOption = {
+      mode: "walking",
+      segments: [walkRoute],
+      totalDistance: walkRoute.distance,
+      totalDuration: walkRoute.duration,
+      estimatedCost: 0,
+      crimeScore: crimeStats.totalCrimeScore,
+      geometry: walkRoute.geometry,
+    };
+    result.options.push(walkOption);
+  }
+
+  // 4. Metro Route (simplified - walking to/from stations + transit time estimate)
+  // For metro, we estimate based on straight-line distance and average subway speed
+  if (straightLineDistanceMiles > 0.5) {
+    // Only suggest metro for longer distances
+    const metroDistanceEstimate = straightLineDistanceKm * 1.3; // Account for non-direct routes
+    const metroDurationMinutes = (metroDistanceEstimate / 1.609) / metroStats.avgSpeedMph * 60;
+    const walkToStationMinutes = 5; // Estimated walk to/from subway
+    const waitTime = 5; // Average wait time
+
+    // Use walking route geometry as approximation (metro follows similar paths in NYC)
+    const metroGeometry = walkRoute?.geometry || [];
+    const crimeStats = await getCrimeAlongRoute(metroGeometry);
+
+    const metroOption: RouteOption = {
+      mode: "metro",
+      segments: [],
+      totalDistance: metroDistanceEstimate * 1000,
+      totalDuration: (metroDurationMinutes + walkToStationMinutes * 2 + waitTime) * 60,
+      estimatedCost: 2.9, // MTA flat fare
+      crimeScore: crimeStats.totalCrimeScore,
+      geometry: metroGeometry,
+    };
+    result.options.push(metroOption);
+  }
+
+  // Determine recommendations
+  if (result.options.length > 0) {
+    // Fastest
+    result.recommendation.fastest = result.options.reduce((prev, curr) =>
+      curr.totalDuration < prev.totalDuration ? curr : prev
+    );
+
+    // Cheapest
+    result.recommendation.cheapest = result.options.reduce((prev, curr) =>
+      curr.estimatedCost < prev.estimatedCost ? curr : prev
+    );
+
+    // Safest (lowest crime score)
+    result.recommendation.safest = result.options.reduce((prev, curr) =>
+      curr.crimeScore < prev.crimeScore ? curr : prev
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Calculate haversine distance between two points in kilometers
+ */
+function haversineDistance(point1: RoutePoint, point2: RoutePoint): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(point2.lat - point1.lat);
+  const dLon = toRad(point2.lng - point1.lng);
+  const lat1 = toRad(point1.lat);
+  const lat2 = toRad(point2.lat);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+function toRad(deg: number): number {
+  return deg * (Math.PI / 180);
+}
+
+// ===========================================
 // Weather Grid for Map Overlay
 // ===========================================
 
