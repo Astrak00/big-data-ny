@@ -46,7 +46,7 @@ struct ParsedTrip {
 
 const BATCH_SIZE: usize = 1000;
 
-pub async fn load(pool: &Pool, source: &str, limit: usize) -> Result<()> {
+pub async fn load(pool: &Pool, source: &str, limit: usize, truncate: bool) -> Result<()> {
     info!("Loading bike data from: {}", source);
     
     let source_path = Path::new(source);
@@ -67,7 +67,10 @@ pub async fn load(pool: &Pool, source: &str, limit: usize) -> Result<()> {
     let mut client = pool.get().await?;
     
     // Clear existing data
-    client.execute("TRUNCATE TABLE bike_trips", &[]).await?;
+    if truncate {
+        info!("Truncating existing bike_trips data...");
+        client.execute("TRUNCATE TABLE bike_trips", &[]).await?;
+    }
     
     let pb = ProgressBar::new_spinner();
     pb.set_style(ProgressStyle::default_spinner()

@@ -54,6 +54,8 @@ enum Commands {
         source: String,
         #[arg(short, long, default_value = "0")]
         limit: usize,
+        #[arg(short, long, default_value = "false")]
+        truncate: bool,
     },
     /// Load arrests data from GeoJSON
     Arrests {
@@ -110,8 +112,8 @@ async fn main() -> Result<()> {
         Commands::Taxi { source, limit, random } => {
             loaders::taxi::load(&pool, &source, limit, random).await?;
         }
-        Commands::Bike { source, limit } => {
-            loaders::bike::load(&pool, &source, limit).await?;
+        Commands::Bike { source, limit, truncate } => {
+            loaders::bike::load(&pool, &source, limit, truncate).await?;
         }
         Commands::Arrests { source, limit } => {
             loaders::arrests::load(&pool, &source, limit).await?;
@@ -147,7 +149,7 @@ async fn run_all_pipelines(pool: &deadpool_postgres::Pool, data_dir: &str) -> Re
     let bike_file = data_path.join("JC-202412-citibike-tripdata.csv");
     if bike_file.exists() {
         info!("Loading bike data...");
-        loaders::bike::load(pool, bike_file.to_str().unwrap(), 0).await?;
+        loaders::bike::load(pool, bike_file.to_str().unwrap(), 0, false).await?;
     }
     
     // Load arrests data

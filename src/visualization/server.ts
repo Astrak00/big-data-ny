@@ -29,6 +29,21 @@ app.route("/api", apiRoutes);
 // Static Files
 // ===========================================
 
+// Serve node_modules files (for chart.js, etc.)
+app.get("/node_modules/*", async (c) => {
+  const path = c.req.path.replace("/node_modules/", "");
+  const file = Bun.file(`./node_modules/${path}`);
+  
+  if (await file.exists()) {
+    const contentType = getContentType(path);
+    return new Response(file, {
+      headers: { "Content-Type": contentType },
+    });
+  }
+  
+  return c.notFound();
+});
+
 // Serve static files from public directory
 app.get("/public/*", async (c) => {
   const path = c.req.path.replace("/public/", "");

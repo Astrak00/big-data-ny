@@ -45,8 +45,9 @@ struct Args {
 
 fn make_url(year: u16, month: u8) -> (String, String) {
     let month_str = format!("{:02}", month);
-    let filename = format!("bikes_data/JC-{}{}-citibike-tripdata.csv.zip", year, month_str);
-    let url = format!("https://s3.amazonaws.com/tripdata/JC-{}{}-citibike-tripdata.csv.zip", year, month_str);
+    // NYC Citi Bike data uses .zip extension (not .csv.zip like Jersey City)
+    let filename = format!("bikes_data/{}{}-citibike-tripdata.zip", year, month_str);
+    let url = format!("https://s3.amazonaws.com/tripdata/{}{}-citibike-tripdata.zip", year, month_str);
     (url, filename)
 }
 
