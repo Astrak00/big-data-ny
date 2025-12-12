@@ -24,11 +24,14 @@ pub async fn download_all(output_dir: &str) -> Result<()> {
     ).await?;
     
     // Download bike data (zip file)
+    // To download the bike data, please use the bikes_data folder
+    info!("Skipping bike data download. Please use the bikes_data folder for Citibike data.");
+    /*
     info!("Downloading bike data...");
     let bike_zip = output_path.join("citibike.csv.zip");
     download_file(config::BIKE_DATA_URL, &bike_zip).await?;
     extract_zip(&bike_zip, output_path).await?;
-    
+    */
     // Download arrests data
     info!("Downloading arrests data...");
     download_file(

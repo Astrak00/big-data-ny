@@ -35,12 +35,20 @@ struct Args {
     concurrency: Option<usize>,
 
     /// Start year (inclusive)
-    #[arg(long, default_value_t = 2015u16)]
+    #[arg(long, default_value_t = 2024u16)]
     start_year: u16,
 
     /// End year (inclusive)
-    #[arg(long, default_value_t = 2025u16)]
+    #[arg(long, default_value_t = 2024u16)]
     end_year: u16,
+
+    /// Start month (1-12)
+    #[arg(long, default_value_t = 11u8)]
+    start_month: u8,
+
+    /// End month (1-12)
+    #[arg(long, default_value_t = 12u8)]
+    end_month: u8,
 }
 
 fn make_url(year: u16, month: u8) -> (String, String) {
@@ -109,7 +117,7 @@ async fn main() {
 
     let mut urls = Vec::new();
     for year in args.start_year..=args.end_year {
-        for month in 11u8..=12u8 {
+        for month in args.start_month..=args.end_month {
             let (url, filename) = make_url(year, month);
             urls.push((url, filename));
         }
