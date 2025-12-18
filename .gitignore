@@ -13,3 +13,5 @@ target/
 *.csv
 *.zip
 src/.venv/
+*.zip
+*.part*

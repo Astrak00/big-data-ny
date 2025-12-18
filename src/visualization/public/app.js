@@ -778,8 +778,8 @@ async function initDatePickers() {
         var endPicker = getElement('end-date');
         
         // Default date range
-        var defaultStart = '2024-12-01';
-        var defaultEnd = '2024-12-01';
+        var defaultStart = '2024-12-20';
+        var defaultEnd = '2024-12-31';
         
         if (dates.min) {
             startPicker.min = dates.min;

@@ -6,7 +6,7 @@ use deadpool_postgres::Pool;
 use indicatif::{ProgressBar, ProgressStyle};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
@@ -64,7 +64,7 @@ pub async fn load(pool: &Pool, source: &str, limit: usize, random: bool) -> Resu
         } else {
             // Generate random indices
             let mut all_indices: Vec<usize> = (0..total_rows).collect();
-            all_indices.shuffle(&mut thread_rng());
+            all_indices.shuffle(&mut rng());
             let selected: HashSet<usize> = all_indices.into_iter().take(limit).collect();
             info!("Selected {} random indices for sampling", selected.len());
             Some(selected)

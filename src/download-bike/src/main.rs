@@ -43,7 +43,7 @@ struct Args {
     end_year: u16,
 
     /// Start month (1-12)
-    #[arg(long, default_value_t = 11u8)]
+    #[arg(long, default_value_t = 12u8)]
     start_month: u8,
 
     /// End month (1-12)

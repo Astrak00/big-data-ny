@@ -81,6 +81,7 @@ pub async fn download_file(url: &str, output_path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn extract_zip(zip_path: &Path, output_dir: &Path) -> Result<()> {
     use zip::ZipArchive;
     

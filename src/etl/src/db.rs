@@ -45,3 +45,34 @@ pub async fn create_pool(database_url: &str) -> Result<Pool> {
     
     Ok(pool)
 }
+
+pub async fn count_records(pool: &Pool, table: Option<&str>) -> Result<()> {
+    let client = pool.get().await?;
+    
+    if let Some(table_name) = table {
+        let row = client
+            .query_one(&format!("SELECT COUNT(*) FROM {}", table_name), &[])
+            .await?;
+        let count: i64 = row.get(0);
+        info!("Table '{}' has {} records", table_name, count);
+    } else {
+        // Obtain all table names from the public schema
+        let rows = client
+            .query(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
+                &[],
+            )
+            .await?;
+        let tables: Vec<String> = rows.iter().map(|row| row.get(0)).collect();
+        
+        for table_name in tables {
+            let row = client
+                .query_one(&format!("SELECT COUNT(*) FROM {}", table_name), &[])
+                .await?;
+            let count: i64 = row.get(0);
+            info!("Table '{}' has {} records", table_name, count);
+        }
+    }
+    
+    Ok(())
+}

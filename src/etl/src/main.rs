@@ -87,6 +87,13 @@ enum Commands {
         #[arg(short, long, default_value = "./data")]
         output_dir: String,
     },
+    /// Count records in each table
+    Count {
+        /// Table name to count (optional)
+        #[arg(short, long)]
+        table: Option<String>,
+    }
+    
 }
 
 #[tokio::main]
@@ -126,6 +133,9 @@ async fn main() -> Result<()> {
         }
         Commands::Download { output_dir } => {
             extractors::download_all(&output_dir).await?;
+        }
+        Commands::Count { table } => {
+            db::count_records(&pool, table.as_deref()).await?;
         }
     }
     
